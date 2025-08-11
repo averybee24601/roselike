@@ -98,6 +98,7 @@
       <h3>Quest Tracker</h3>
       <p id="quest-line">Welcome to Adventure Plains. Press <b>E</b> near the signpost.</p>
       <p id="quest-progress"></p>
+      <p id="quest-reward" style="opacity:.9"></p>
     </div>
 
     <div class="hotbar" id="hotbar" aria-label="skills">
@@ -112,7 +113,7 @@
         <span style="width:60px; font-size:12px">XP</span>
         <div class="meter"><i class="xp" id="xp"></i></div>
         <span class="chip">Next <span id="nextxp">50</span></span>
-        <span class="chip" style="margin-left:auto">Keys: <b>I</b> Inventory · <b>M</b> Shop · <b>J</b> Jobs</span>
+        <span class="chip" style="margin-left:auto">Keys: <b>I</b> Inventory · <b>M</b> Shop · <b>J</b> Jobs · <b>Alt+A</b> Stats/Skills</span>
       </div>
     </div>
 
@@ -153,13 +154,19 @@
     <button class="close" id="shopClose">✕</button>
     <h2>Merchant 🛒 — Marketer of the Plains <span class="pill">Gold <span id="shopGold">0</span> ✦</span></h2>
     <div class="list" id="shopList"></div>
-    <p style="opacity:.8; margin-top:8px">Tip: Finish the <b>Cart License</b> quest to ride.</p>
+    <p style="opacity:.8; margin-top:8px">Tip: Quests pay <b>Gold</b> — spend it at the <b>Merchant</b>. Finish the <b>Cart License</b> quest to ride.</p>
   </div>
 
   <div class="window" id="jobWin">
     <button class="close" id="jobClose">✕</button>
     <h2>Trainer ★ — Choose Your Job <span class="pill">Requires Lv 10</span></h2>
     <div class="list" id="jobList"></div>
+  </div>
+
+  <div class="window" id="statsWin">
+    <button class="close" id="statsClose">✕</button>
+    <h2>Stats / Skills <span class="pill">Alt+A or Alt+S</span></h2>
+    <div class="list" id="statsList"></div>
   </div>
 
   <div class="toast" id="toast"></div>
@@ -177,11 +184,13 @@
   const invWin = el('invWin'), shopWin=el('shopWin'), jobWin=el('jobWin');
   const invList = el('invList'), shopList=el('shopList'), jobList=el('jobList');
   const invClose = el('invClose'), shopClose=el('shopClose'), jobClose=el('jobClose');
+  const statsWin = el('statsWin'); const statsList = el('statsList'); const statsClose = el('statsClose');
   const invCount=el('invCount');
   const shopGold=el('shopGold');
   const hint=el('hint');
   const mountChip=el('mountChip');
   const questLine = el('quest-line'), questProg = el('quest-progress');
+  const questReward = el('quest-reward');
   const overlay = el('overlay');
   const toast = el('toast');
   const stick = el('stick'), knob = el('knob'), atkBtn = el('atk');
@@ -250,6 +259,7 @@
     feather_charm:{name:'Feather Charm', type:'gear', slot:'accessory', speed:30, price:90},
     royal_core:{name:'Royal Core', type:'gear', slot:'accessory', atk:8, hpMax:30, price:0},
     power_candy:{name:'Power Candy', type:'consumable', atk:4, dur:45, price:25},
+    junon_scroll:{name:'Return Scroll: Junon Polis', type:'consumable', teleport:'junon', spawnTag:'gate', price:0},
     cart_pass:{name:'Cart License', type:'vehicle', vehicle:'cart', price:0}
   };
   const SHOP_STOCK=['potion_hp','potion_mp','wood_sword','wood_bow','wood_katar','wood_staff','wood_wand','leather_armor','runner_shoes','feather_charm','power_candy'];
@@ -294,6 +304,16 @@
   function useItem(index){
     const entry=player.inv[index]; if(!entry) return; const it=ITEM_DB[entry.id];
     if(it.type==='consumable'){
+      // Teleport scrolls (e.g., Return Scroll: Junon Polis)
+      if(it.teleport){
+        if(entry.stack){ entry.stack--; if(entry.stack<=0) player.inv.splice(index,1); }
+        else player.inv.splice(index,1);
+        const dest = it.teleport; const tag = it.spawnTag || 'main';
+        notify('Teleporting...');
+        changeMap(dest, tag);
+        saveMeta(); save();
+        return;
+      }
       if(it.hp) player.hp = clamp(player.hp+it.hp, 0, player.hpMax);
       if(it.mp) player.mp = clamp(player.mp+it.mp, 0, player.mpMax);
       if(it.atk){ player.buffs.push({atk:it.atk, t:it.dur||30}); }
@@ -338,7 +358,15 @@
       actions.appendChild(btn); shopList.appendChild(div); shopList.appendChild(actions);
     }); shopWin.style.display='block'; }
   function closeShop(){ shopWin.style.display='none'; }
-  invClose.onclick=closeInventory; shopClose.onclick=closeShop; jobClose.onclick=()=>jobWin.style.display='none';
+  invClose.onclick=closeInventory; shopClose.onclick=closeShop; jobClose.onclick=()=>jobWin.style.display='none'; statsClose.onclick=()=>statsWin.style.display='none';
+
+  function openSkills(){
+    const s = player.stats || (player.stats={str:0,dex:0,int:0});
+    statsList.innerHTML = '';
+    const mkRow=(label,key)=>{ const wrap=document.createElement('div'); wrap.className='item'; wrap.innerHTML=`<b>${label}</b> <span class="pill">${s[key]}</span>`; const actions=document.createElement('div'); const plus=document.createElement('button'); plus.textContent='+1'; plus.onclick=()=>{ s[key]++; recalcStats(); save(); openSkills(); }; actions.appendChild(plus); statsList.appendChild(wrap); statsList.appendChild(actions); };
+    mkRow('STR','str'); mkRow('DEX','dex'); mkRow('INT','int');
+    statsWin.style.display='block';
+  }
 
   // Skills
   const SKILL_DB={
@@ -372,9 +400,26 @@
   function tryUseSkill(slot){
     const s = player.skills[slot]; if(!s) return notify('No skill in slot '+(slot+1));
     if(player.skillCd[slot]>0) return;
+    if(player.level < 10){ notify('Skills unlock at Lv 10. Keep leveling!'); return; }
     if(player.mp < s.mp) return notify('Not enough MP');
     player.mp-=s.mp; s.use(); player.skillCd[slot]=s.cd; scds[slot].style.display='grid';
   }
+
+  // Weapon-synergy scaling (STR/DEX/INT)
+  (function(){
+    const _recalc = recalcStats;
+    recalcStats = function(){
+      _recalc();
+      const s = player.stats || (player.stats = {str:0,dex:0,int:0});
+      let atk = player.atk, hpMax = player.hpMax;
+      const wepType = (player.eq && player.eq.weapon && ITEM_DB[player.eq.weapon]?.wep) || 'fist';
+      if(wepType==='bow' || wepType==='katar'){ atk += s.dex * 0.8; player.speed += s.dex * 2; }
+      if(wepType==='sword'){ atk += s.str * 0.8; hpMax += Math.floor(s.str * 3); }
+      if(wepType==='staff' || wepType==='wand'){ atk += s.int * 0.9; }
+      player.atk = Math.round(atk); player.hpMax = hpMax;
+      if(player.hp>player.hpMax) player.hp=player.hpMax;
+    };
+  })();
 
   // Skill helpers
   function dash(len){ const a=player.dir; player.x+=Math.cos(a)*len; player.y+=Math.sin(a)*len; fx.push({t:0.3, kind:'dash', x:player.x, y:player.y}); }
@@ -406,6 +451,9 @@
     if(type==='pumpkin'){ Object.assign(base,{r:19,speed:70,hp:70,hpMax:70,atk:10}); }
     if(type==='flanae'){ Object.assign(base,{r:18,speed:120,hp:45,hpMax:45,atk:8, flyer:true}); }
     if(type==='jellyking'){ Object.assign(base,{r:28,speed:85,hp:360,hpMax:360,atk:14, boss:true}); }
+    if(type==='moldy'){ Object.assign(base,{r:20,speed:70,hp:120,hpMax:120,atk:16}); }
+    if(type==='moldy_elite'){ Object.assign(base,{r:22,speed:80,hp:220,hpMax:220,atk:24}); }
+    if(type==='rockgolem'){ Object.assign(base,{r:26,speed:60,hp:420,hpMax:420,atk:30, golem:true}); }
     ents.push(base); return base;
   }
 
@@ -418,24 +466,25 @@
   }
   (function spawnBoss(){ let tries=0; while(tries++<50){ const x=rand(TILE*20, TILE*(MAP_W-12)); const y=rand(TILE*18, TILE*(MAP_H-12)); if(dist(x,y,startPos.x,startPos.y)>TILE*25){ spawnMob('jellyking',x,y); break; } }})();
 
-  // NPCs
+    // NPCs
   const sign = {kind:'npc', npc:'sign', x:startPos.x+TILE*2.5, y:startPos.y- TILE*1.2, r:18};
   const merchant = {kind:'npc', npc:'merchant', x:startPos.x+TILE*5.5, y:startPos.y- TILE*0.3, r:22};
   const trainer = {kind:'npc', npc:'trainer', x:startPos.x+TILE*3.8, y:startPos.y+ TILE*0.4, r:22};
-  const cartMaster = {kind:'npc', npc:'cartmaster', x:startPos.x+TILE*0.8, y:startPos.y+ TILE*1.8, r:24};
+    const cartMaster = {kind:'npc', npc:'cartmaster', x:startPos.x+TILE*0.8, y:startPos.y+ TILE*1.8, r:24};
+    // Boat NPC in plains is static object; ferryJ is placed in genJunon
 
   // Quests
   const quests=[
-    {id:0, title:'Meet the Plains', line:'Welcome! Interact with the wooden signpost.', need:0, type:'talk', done:false, reward:{xp:30,gold:10, items:[['potion_hp',2]]}},
-    {id:1, title:'Jelly Cleanup', line:'Defeat 10 Jelly Blobs', need:10, type:'jelly', prog:0, done:false, reward:{xp:80,gold:30, items:[['wood_sword',1]]}},
-    {id:2, title:'Pumpkin Patrol', line:'Defeat 5 Pumpkinlings', need:5, type:'pumpkin', prog:0, done:false, reward:{xp:150,gold:50, items:[['wood_bow',1]]}},
-    {id:3, title:'Cart License', line:'Talk to the Cart Master (🛞). Complete his task to earn your license.', need:1, type:'cartquest', prog:0, done:false, reward:{xp:100,gold:0, items:[['cart_pass',1]]}},
-    {id:4, title:'Plains Protector', line:'Reach Level 10 then pick a Job with the Trainer (★).', need:10, type:'level', done:false, reward:{xp:200,gold:100, items:[['wood_staff',1],['wood_katar',1],['wood_wand',1]]}}
+    {id:0, title:'Meet the Plains', line:'Welcome! Interact with the wooden signpost.', need:0, type:'talk', done:false, reward:{xp:30,gold:40, items:[['potion_hp',2]]}},
+    {id:1, title:'Jelly Cleanup', line:'Defeat 10 Jelly Blobs', need:10, type:'jelly', prog:0, done:false, reward:{xp:80,gold:100, items:[['wood_sword',1]]}},
+    {id:2, title:'Pumpkin Patrol', line:'Defeat 5 Pumpkinlings', need:5, type:'pumpkin', prog:0, done:false, reward:{xp:150,gold:150, items:[['wood_bow',1]]}},
+    {id:3, title:'Cart License', line:'Talk to the Cart Master (🛞). Complete his task to earn your license.', need:1, type:'cartquest', prog:0, done:false, reward:{xp:100,gold:80, items:[['cart_pass',1]]}},
+    {id:4, title:'Plains Protector', line:'Reach Level 10 then pick a Job with the Trainer (★).', need:10, type:'level', done:false, reward:{xp:200,gold:220, items:[['wood_staff',1],['wood_katar',1],['wood_wand',1]]}}
   ];
   let qIndex=0;
 
   // Cart subquest state (patch 3 spec)
-  const cartQuest = {active:false, paid:false, fee:50, pumpkins:0, needPumpkins:10};
+  const cartQuest = {active:false, paid:false, fee:20, pumpkins:0, needPumpkins:10};
   player.flags = player.flags || {}; // holds cartUnlocked
 
   function xpFor(level){ if(level>=10) return Infinity; return Math.floor(50 * Math.pow(level, 1.5)); }
@@ -443,6 +492,7 @@
   // Input
   const keys={};
   addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); keys[k]=true; if(e.key===' '){e.preventDefault();}
+    if(e.altKey && ((e.key==='S'||k==='s') || (e.key==='A'||k==='a'))){ if(typeof openSkills==='function') openSkills(); }
     if(k==='i'){ openInventory(); }
     if(k==='m'){ if(nearest(merchant) < TILE*1.8) openShop(); else notify('Find the Merchant (🛒)'); }
     if(k==='j'){ if(nearest(trainer) < TILE*1.8) openJobs(); else notify('Find the Trainer (★)'); }
@@ -487,6 +537,7 @@
       if(dist(x,y,startPos.x,startPos.y)>TILE*10) spawnMob(t,x,y);
     }
     (function spawnBoss(){ let tries=0; while(tries++<50){ const x=rand(TILE*20, TILE*(MAP_W-12)); const y=rand(TILE*18, TILE*(MAP_H-12)); if(dist(x,y,startPos.x,startPos.y)>TILE*25){ spawnMob('jellyking',x,y); break; } }})();
+    mapName='plains'; genPlains(); saveMeta();
     save();
   }
 
@@ -495,11 +546,13 @@
   const SAVE_FALLBACK='ap-save-v3';
 
   function save(){
+    saveMeta();
     const data={p:{x:player.x,y:player.y,hp:player.hp,mp:player.mp,level:player.level,xp:player.xp,gold:player.gold,baseAtk:player.baseAtk,eq:player.eq,inv:player.inv,mounted:player.mounted,job:player.job,flags:player.flags}, q:quests.map(q=>({id:q.id,prog:q.prog,done:q.done})), idx:qIndex, cartQuest};
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   }
 
   function load(){
+    loadMeta();
     let s=localStorage.getItem(SAVE_KEY);
     if(!s){ s=localStorage.getItem(SAVE_FALLBACK); }
     if(!s) return false;
@@ -510,6 +563,7 @@
       quests.forEach(q=>{ const st=(d.q||[]).find(x=>x.id===q.id); if(st){ q.prog=st.prog||0; q.done=!!st.done; } else { q.prog=0; q.done=false; } });
       qIndex=d.idx||0; if(d.cartQuest){ Object.assign(cartQuest, d.cartQuest); }
       recalcStats(); setSkillsForJob(player.job||'Visitor');
+      if(mapName==='junon'){ genJunon(); } else { genPlains(); }
       notify('Save loaded');
       return true;
     }catch(e){ console.warn('load failed', e); return false; }
@@ -522,6 +576,94 @@
   function tileAt(x,y){ const tx=Math.floor(x/TILE), ty=Math.floor(y/TILE); if(tx<0||ty<0||tx>=MAP_W||ty>=MAP_H) return 1; return tiles[ty*MAP_W+tx]; }
   function blocked(x,y){ return tileAt(x,y)===2; } // water blocks
   function nearest(obj){ return dist(player.x,player.y,obj.x,obj.y); }
+
+  // ==== PATCH 5: Multi-map + ferry travel ====
+  let mapName = 'plains';
+  let transition = {a:0,to:null};
+
+  const harbor  = {kind:'npc', npc:'harbor', x: TILE*12.0, y: TILE*9.6,  r:26};  // plains dock
+  const ferryJ  = {kind:'npc', npc:'ferryJ', x: TILE*44.0, y: TILE*58.0, r:26};  // junon dock
+  let ferryCost = 60;
+
+  const MAPS = {
+    plains: { label:'Adventure Plains', gen: genPlains,  spawn:{main:{x: TILE*4, y: TILE*6}} },
+    junon:  { label:'Junon Polis',      gen: genJunon,   spawn:{dock:{x: TILE*44, y: TILE*58}, gate:{x:TILE*20, y:TILE*28}} }
+  };
+
+  function saveMeta(){ try{ localStorage.setItem('ap-meta', JSON.stringify({mapName})); }catch(e){} }
+  function loadMeta(){ try{ const m=JSON.parse(localStorage.getItem('ap-meta')||'{}'); if(m.mapName) mapName=m.mapName; }catch(e){} }
+
+  function drawTransitionOverlay(){
+    if(!transition.to && transition.a<=0) return;
+    if(transition.to){ transition.a += 0.06; if(transition.a>=1){
+        const {next, spawnTag} = transition.to;
+        mapName = next; softResetRuntime(); MAPS[mapName].gen();
+        const sp = MAPS[mapName].spawn[spawnTag] || Object.values(MAPS[mapName].spawn)[0];
+        player.x = sp.x; player.y = sp.y; saveMeta(); transition.to=null;
+      }
+    } else { transition.a -= 0.06; if(transition.a<0) transition.a=0; }
+    ctx.save(); ctx.globalAlpha = Math.min(1,Math.max(0,transition.a)); ctx.fillStyle='#000'; ctx.fillRect(0,0,vw,vh); ctx.restore();
+  }
+  function changeMap(next, spawnTag='main'){ transition.to={next, spawnTag}; }
+
+  function softResetRuntime(){ ents.length=0; projs.length=0; drops.length=0; decor.length=0; turrets.length=0; }
+
+  function interactHarbor(){
+    if(mapName==='plains'){
+      if((player.gold|0) < ferryCost){ notify(`Boat fare is ${ferryCost}✦`); return; }
+      player.gold -= ferryCost; notify('Setting sail for Junon Polis…'); changeMap('junon','dock'); save();
+    } else {
+      const back = Math.floor(ferryCost*0.5);
+      if((player.gold|0) < back){ notify(`Return fare is ${back}✦`); return; }
+      player.gold -= back; notify('Returning to Adventure Plains…'); changeMap('plains','main'); save();
+    }
+  }
+
+  function drawBoatNPC(obj){
+    const s=worldToScreen(obj.x,obj.y);
+    ctx.fillStyle='#3a2c12'; ctx.fillRect(s.x-26, s.y-6, 52, 12);
+    ctx.fillStyle='#2b4a6a'; ctx.fillRect(s.x-34, s.y+6, 68, 10);
+    ctx.fillStyle='#734c2a'; ctx.beginPath(); ctx.moveTo(s.x-20, s.y+6); ctx.lineTo(s.x+20, s.y+6); ctx.lineTo(s.x+12, s.y+20); ctx.lineTo(s.x-12, s.y+20); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(s.x-20, s.y-42, 40, 16);
+    ctx.fillStyle='#cfe'; ctx.fillText('⛵ E', s.x-14, s.y-30);
+  }
+
+  function genPlains(){
+    for(let i=0;i<MAP_W*MAP_H;i++){
+      let x=i%MAP_W, y=(i/MAP_W)|0;
+      let g = (Math.sin(x*0.33)+Math.cos(y*0.27))*0.5 + Math.random()*0.6;
+      tiles[i] = g>0.55?1:0;
+    }
+    for(let y=20;y<28;y++) for(let x=20;x<28;x++){ if((x-24)**2+(y-24)**2<16) tiles[y*MAP_W+x]=2; }
+    decor.length=0;
+    for(let y=0;y<MAP_H;y++){ for(let x=0;x<MAP_W;x++){
+      if(tiles[y*MAP_W+x]===0 && Math.random()>0.965) decor.push({t: Math.random()>0.6? 'tree':'rock', x:x*TILE+8+Math.random()*(TILE-16), y:y*TILE+8+Math.random()*(TILE-16)});
+      if(tiles[y*MAP_W+x]===0 && Math.random()>0.985) decor.push({t:'flower', x:x*TILE+10+Math.random()*(TILE-20), y:y*TILE+10+Math.random()*(TILE-20)});
+    }}
+    sign.x = TILE*6.5; sign.y = TILE*4.8; merchant.x = TILE*9.5; merchant.y = TILE*5.7; trainer.x = TILE*7.5; trainer.y = TILE*5.8; cartMaster.x = TILE*5.0; cartMaster.y = TILE*7.6;
+    el('zone').textContent = MAPS.plains.label;
+  }
+
+  function genJunon(){
+    for(let i=0;i<MAP_W*MAP_H;i++) tiles[i]=0;
+    const cx=18, cy=22, cw=36, ch=26;
+    for(let y=cy; y<cy+ch; y++) for(let x=cx; x<cx+cw; x++) tiles[y*MAP_W+x] = 1; // dirt pad
+    for(let y=cy-2; y<cy; y++) for(let x=cx-2; x<cx+cw+2; x++) tiles[y*MAP_W+x]=2;
+    for(let y=cy+ch; y<cy+ch+2; y++) for(let x=cx-2; x<cx+cw+2; x++) tiles[y*MAP_W+x]=2;
+    for(let y=cy-2; y<cy+ch+2; y++) for(let x=cx-2; x<cx; x++) tiles[y*MAP_W+x]=2;
+    for(let y=cy-2; y<cy+ch+2; y++) for(let x=cx+cw; x<cx+cw+2; x++) tiles[y*MAP_W+x]=2;
+    const bld = (bx,by,bw,bh)=> decor.push({t:'bld', x:(bx+0.5)*TILE, y:(by+0.5)*TILE, w:bw*TILE, h:bh*TILE});
+    bld(cx+2, cy+3, 8, 6); bld(cx+15, cy+3, 8, 6); bld(cx+28, cy+3, 6, 6);
+    bld(cx+3, cy+16, 10, 7); bld(cx+19, cy+16, 8, 7); bld(cx+29, cy+16, 8, 7);
+    ferryJ.x = (cx+cw+1)*TILE; ferryJ.y = (cy+ch+1)*TILE;
+    merchant.x = (cx+Math.floor(cw/2))*TILE; merchant.y = (cy+12)*TILE;
+    trainer.x = (cx+Math.floor(cw/2)-2)*TILE; trainer.y = (cy+10)*TILE;
+    sign.x = (cx+Math.floor(cw/2))*TILE; sign.y = (cy+9)*TILE;
+    el('zone').textContent = MAPS.junon.label;
+    // Junon spawns (Patch 7): tougher mobs
+    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0||tt===1){spawnMob(t,x*TILE+TILE/2,y*TILE+TILE/2);n++;}}};
+    spawnOut('moldy',60); spawnOut('moldy_elite',20); spawnOut('rockgolem',8);
+  }
 
   // Cart summon
   let summonedCart=null;
@@ -624,6 +766,22 @@
       if(Math.random()<0.25) rolls.push('power_candy');
       if(Math.random()<0.20) rolls.push('royal_core');
     }
+    if(m.type==='moldy'){
+      if(Math.random()<0.22) rolls.push('potion_hp');
+      if(Math.random()<0.08) rolls.push('wood_sword');
+      if(Math.random()<0.06) rolls.push('wood_katar');
+    }
+    if(m.type==='moldy_elite'){
+      if(Math.random()<0.25) rolls.push('potion_hp');
+      if(Math.random()<0.10) rolls.push('wood_staff');
+      if(Math.random()<0.10) rolls.push('wood_bow');
+      if(Math.random()<0.08) rolls.push('runner_shoes');
+    }
+    if(m.type==='rockgolem'){
+      if(Math.random()<0.35) rolls.push('potion_hp');
+      if(Math.random()<0.15) rolls.push('leather_armor');
+      if(Math.random()<0.12) rolls.push('royal_core');
+    }
     for(const id of rolls){ if(id==='potion_hp' || id==='potion_mp'){ drops.push({x:m.x+rand(-12,12), y:m.y+rand(-12,12), t:0, item:id, stack: (Math.random()<0.5?2:1)}); } else { drops.push({x:m.x+rand(-12,12), y:m.y+rand(-12,12), t:0, item:id}); } }
   }
 
@@ -637,7 +795,7 @@
         if(rw.xp) grantXP(rw.xp);
         if(rw.gold){ player.gold = (player.gold|0) + rw.gold; }
         if(rw.items){ rw.items.forEach(([id,qty])=> addToInv(id, qty||1)); }
-        notify('Quest complete: '+q.title);
+        notify('Quest complete: '+q.title + ' — Rewards: ' + rewardText(q));
         save();
         if(qIndex < quests.length-1) qIndex++;
       } else { save(); }
@@ -646,7 +804,7 @@
 
   function onMobKilled(m){
     const baseXP = (m.boss? 120 : (m.type==='pumpkin'? 18 : m.type==='flanae'? 20 : 14));
-    const baseG  = (m.boss? [60,120] : (m.type==='pumpkin'? [6,14] : m.type==='flanae'? [6,12] : [4,10]));
+    const baseG  = (m.boss? [60,120] : (m.type==='pumpkin'? [8,16] : m.type==='flanae'? [8,14] : [6,12]));
     grantXP(baseXP);
     dropGold(m.x, m.y, baseG[0], baseG[1]);
     questKillCredit(m.type);
@@ -668,17 +826,38 @@
   // Interact: sign
   function interactSign(){
     const q=quests.find(q=>q.id===0); if(!q) return;
-    if(!q.done){ q.done=true; const rw=q.reward||{}; if(rw.xp) grantXP(rw.xp); if(rw.gold) player.gold=(player.gold|0)+rw.gold; if(rw.items) rw.items.forEach(([id,qty])=> addToInv(id, qty||1)); notify('Quest complete: '+q.title); if(qIndex<quests.length-1) qIndex++; save(); }
+    if(!q.done){ q.done=true; const rw=q.reward||{}; if(rw.xp) grantXP(rw.xp); if(rw.gold) player.gold=(player.gold|0)+rw.gold; if(rw.items) rw.items.forEach(([id,qty])=> addToInv(id, qty||1)); notify('Quest complete: '+q.title + ' — Rewards: ' + rewardText(q)); if(qIndex<quests.length-1) qIndex++; save(); }
     else notify('Welcome back to Adventure Plains.');
+  }
+
+  function rewardText(obj){
+    if(!obj) return '';
+    const rw = obj.reward || {};
+    const parts = [];
+    if(rw.xp) parts.push(`${rw.xp} XP`);
+    if(rw.gold!=null) parts.push(`${rw.gold}✦ Gold`);
+    if(rw.items){ const is = rw.items.map(it=> (ITEM_DB[it[0]]? ITEM_DB[it[0]].name: it[0]) + (it[1]>1? ` x${it[1]}`:'')); if(is.length) parts.push(is.join(', ')); }
+    return parts.join(' · ');
   }
 
   function updateQuestText(){
     const q = quests[qIndex];
-    if(!q){ questLine.textContent='All quests complete!'; questProg.textContent=''; return; }
-    if(q.type==='talk'){ questLine.textContent=q.line; questProg.textContent=''; return; }
-    if(q.type==='level'){ questLine.textContent=q.line; questProg.textContent=`Lv ${player.level}/${q.need}`; return; }
-    if(q.type==='cartquest'){ questLine.textContent=q.line; const prog = cartQuest.active? `${cartQuest.paid? 'Paid, ':''}${cartQuest.pumpkins}/${cartQuest.needPumpkins} pumpkins` : 'Talk to the Cart Master.'; questProg.textContent=prog; return; }
-    questLine.textContent=q.title+': '+q.line; questProg.textContent=`${q.prog||0}/${q.need}`;
+    if(!q){
+      questLine.textContent='All quests complete!';
+      questProg.textContent='';
+      if(questReward) questReward.textContent='';
+      return;
+    }
+    if(q.type==='talk'){
+      questLine.textContent=q.line; questProg.textContent='';
+    } else if(q.type==='level'){
+      questLine.textContent=q.line; questProg.textContent=`Lv ${player.level}/${q.need}`;
+    } else if(q.type==='cartquest'){
+      questLine.textContent=q.line; const prog = cartQuest.active? `${cartQuest.paid? 'Paid, ':''}${cartQuest.pumpkins}/${cartQuest.needPumpkins} pumpkins` : 'Talk to the Cart Master.'; questProg.textContent=prog;
+    } else {
+      questLine.textContent=q.title+': '+q.line; questProg.textContent=`${q.prog||0}/${q.need}`;
+    }
+    if(questReward) questReward.textContent = 'Rewards: ' + rewardText(q) + ' — spend gold at the Merchant (🛒).';
   }
 
   function dmgPlayer(d){ player.hp -= d; if(player.hp<0) player.hp= -1; }
@@ -714,6 +893,8 @@
       else if(nearest(trainer)<TILE*1.8){ openJobs(); keys['e']=false; }
       else if(nearest(cartMaster)<TILE*1.8){ interactCartMaster(); keys['e']=false; }
       else if(summonedCart && nearest(summonedCart)<TILE*1.8){ mountCart(); keys['e']=false; }
+      else if(nearest(harbor)<TILE*1.8){ interactHarbor(); keys['e']=false; }
+      else if(mapName==='junon' && nearest(ferryJ)<TILE*1.8){ interactHarbor(); keys['e']=false; }
     }
 
     // Projectiles & turrets
@@ -744,22 +925,48 @@
     const sx = Math.floor(camera.x/TILE), sy = Math.floor(camera.y/TILE); const ex = Math.ceil((camera.x+vw)/TILE), ey=Math.ceil((camera.y+vh)/TILE);
     for(let y=sy;y<ey;y++){
       for(let x=sx;x<ex;x++){
-        if(x<0||y<0||x>=MAP_W||y>=MAP_H) continue; const t=tiles[y*MAP_W+x]; const px = x*TILE - camera.x; const py=y*TILE - camera.y; if(t===0){ ctx.fillStyle = '#11331f'; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle = '#164927'; ctx.fillRect(px,py,TILE,TILE*(0.5+ (x*13+y*7)%10/30)); } else if(t===1){ ctx.fillStyle = '#5b4a2c'; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle = '#6d5a35'; ctx.globalAlpha=0.5; ctx.fillRect(px+4,py+4,TILE-8,TILE-8); ctx.globalAlpha=1; } else { ctx.fillStyle = '#1e5068'; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.beginPath(); ctx.arc(px+TILE*0.6,py+TILE*0.4,10,0,6.28); ctx.fill(); }
+        if(x<0||y<0||x>=MAP_W||y>=MAP_H) continue; const t=tiles[y*MAP_W+x]; const px = x*TILE - camera.x; const py=y*TILE - camera.y;
+        if(t===0){ // grass
+          const g = ctx.createLinearGradient(0, py, 0, py+TILE);
+          g.addColorStop(0, '#174a2a'); g.addColorStop(1, '#10311f');
+          ctx.fillStyle = g; ctx.fillRect(px,py,TILE,TILE);
+          ctx.fillStyle = 'rgba(255,255,255,0.03)';
+          for(let i=0;i<3;i++){ ctx.fillRect(px+4+i*16, py+2, 6, TILE-4); }
+        }else if(t===1){ // dirt
+          ctx.fillStyle = '#6d5a35'; ctx.fillRect(px,py,TILE,TILE);
+          ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth=1; ctx.strokeRect(px+0.5,py+0.5,TILE-1,TILE-1);
+          ctx.fillStyle='rgba(255,255,255,0.04)'; ctx.fillRect(px+3,py+3,TILE-6,TILE-6);
+        }else{ // water
+          const g = ctx.createLinearGradient(0, py, 0, py+TILE);
+          g.addColorStop(0, '#2e7da3'); g.addColorStop(1, '#1f5a74');
+          ctx.fillStyle = g; ctx.fillRect(px,py,TILE,TILE);
+          ctx.fillStyle = 'rgba(255,255,255,0.08)';
+          const w = 8, amp=2, y0 = py + (TILE*0.3);
+          for(let xx=px; xx<px+TILE; xx+=w){
+            const yy = y0 + Math.sin((xx*0.2) + performance.now()/500)*amp;
+            ctx.fillRect(xx, Math.round(yy), w-2, 2);
+          }
+        }
       }
     }
     // Decor
     for(const d of decor){ const s=worldToScreen(d.x,d.y); if(s.x<-50||s.y<-50||s.x>vw+50||s.y>vh+50) continue; if(d.t==='tree'){ ctx.fillStyle='#0f3925'; ctx.beginPath(); ctx.arc(s.x,s.y,20,0,6.28); ctx.fill(); ctx.fillStyle='#205b3a'; ctx.beginPath(); ctx.arc(s.x-8,s.y-10,18,0,6.28); ctx.fill(); } else if(d.t==='rock'){ ctx.fillStyle='#3b4653'; ctx.beginPath(); ctx.arc(s.x,s.y,10,0,6.28); ctx.fill(); } else { ctx.fillStyle='#8fd3a0'; ctx.fillRect(s.x-2,s.y-2,4,4); } }
     // NPCs
     drawSign(sign); drawMerchant(merchant); drawTrainer(trainer); drawCartMaster(cartMaster); if(summonedCart) drawCart(summonedCart);
+    if(mapName==='plains') drawBoatNPC(harbor);
+    if(mapName==='junon')  drawBoatNPC(ferryJ);
     // Mobs
     for(const m of ents){ if(!m.alive) continue; const s=worldToScreen(m.x,m.y); if(s.x<-40||s.y<-40||s.x>vw+40||s.y>vh+40) continue; drawMobSprite(m); }
     // Projectiles
     for(const p of projs){ drawProjectile(p); }
+    // Drops (visible gold icons)
+    for(const d of drops){ if(d.gold){ const s=worldToScreen(d.x,d.y); ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font='16px system-ui'; ctx.fillStyle= getComputedStyle(document.documentElement).getPropertyValue('--gold') || '#f1c40f'; const bob = Math.sin(performance.now()/200 + d.x*0.05)*2; ctx.fillText('✦', s.x, s.y - 6 + bob); ctx.restore(); } }
     // Player last
     drawPlayer();
     // FX simple trails
     ctx.fillStyle='rgba(255,255,255,0.25)'; for(const f of fx){ if(f.kind==='trail'){ const s=worldToScreen(f.x,f.y); ctx.beginPath(); ctx.arc(s.x,s.y,3,0,6.28); ctx.fill(); } if(f.kind==='arc'){ const s=worldToScreen(f.x,f.y); ctx.strokeStyle='rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.arc(s.x,s.y,f.r, f.a-0.9, f.a+0.9); ctx.stroke(); } if(f.kind==='boom'){ const s=worldToScreen(f.x,f.y); ctx.strokeStyle='rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.arc(s.x,s.y,24,0,6.28); ctx.stroke(); }
     }
+    drawTransitionOverlay();
   }
 
   // Sprite helpers (PATCH 4)
@@ -788,6 +995,9 @@
     else if(m.type==='pumpkin'){ ctx.fillStyle='#ff9a35'; ctx.beginPath(); ctx.ellipse(s.x, s.y, m.r+2, m.r-2, 0, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#1e5d2a'; ctx.fillRect(s.x-2, s.y-m.r-6, 4, 8); ctx.strokeStyle='#b65a15'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(s.x-m.r*0.6, s.y); ctx.quadraticCurveTo(s.x, s.y+m.r*0.2, s.x+m.r*0.6, s.y); ctx.stroke(); }
     else if(m.type==='flanae'){ ctx.fillStyle='#8cd85a'; ctx.beginPath(); ctx.ellipse(s.x, s.y, m.r, m.r*0.6, 0, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='rgba(200,255,220,0.6)'; ctx.beginPath(); ctx.ellipse(s.x-8, s.y-8, 14, 8, -0.6, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.ellipse(s.x-8, s.y+8, 14, 8, 0.6, 0, Math.PI*2); ctx.fill(); }
     else if(m.type==='jellyking'){ ctx.fillStyle='#f35ac9'; ctx.beginPath(); ctx.ellipse(s.x, s.y+6, m.r+3, m.r-4, 0, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#ffd93b'; ctx.fillRect(s.x-14, s.y-m.r-16, 28, 8); ctx.fillStyle='#6cf'; ctx.fillRect(s.x-6, s.y-m.r-14, 4, 4); ctx.fillStyle='#9f5'; ctx.fillRect(s.x+2, s.y-m.r-14, 4, 4); }
+    else if(m.type==='moldy'){ const g=ctx.createLinearGradient(0, s.y-m.r, 0, s.y+m.r); g.addColorStop(0,'#8dcf6a'); g.addColorStop(1,'#537a3d'); ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(s.x, s.y+4, m.r, m.r-4, 0, 0, Math.PI*2); ctx.fill(); }
+    else if(m.type==='moldy_elite'){ const g=ctx.createLinearGradient(0, s.y-m.r, 0, s.y+m.r); g.addColorStop(0,'#79bf58'); g.addColorStop(1,'#3e6a2a'); ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(s.x, s.y+3, m.r+2, m.r-2, 0, 0, Math.PI*2); ctx.fill(); }
+    else if(m.type==='rockgolem'){ ctx.fillStyle='#5b676f'; ctx.fillRect(s.x-m.r+2, s.y-m.r+6, (m.r*2)-4, (m.r*2)-10); ctx.fillStyle='#2a3238'; ctx.fillRect(s.x-6, s.y-4, 12, 8); }
     ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(s.x-18, s.y-m.r-12, 36, 5); ctx.fillStyle='#e55'; ctx.fillRect(s.x-18, s.y-m.r-12, 36*(m.hp/m.hpMax), 5);
     ctx.restore();
   }
@@ -808,5 +1018,6 @@
 </script>
 </body>
 </html>
+
 
 
