@@ -53,6 +53,11 @@ Later patches (not in this edit):
   .mp{background:linear-gradient(90deg, var(--mp), #6ab3ff)}
   .xp{background:linear-gradient(90deg, var(--xp), #cfa2ff)}
 
+  /* Buff icons bar */
+  .buffbar{display:flex; gap:6px; align-items:center; margin:6px 0 2px}
+  .buff{display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:6px; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.12); font-size:14px}
+  .buff[title]{cursor:help}
+
   .xpbar{position:absolute; left:50%; transform:translateX(-50%); bottom:16px; width:min(860px, 96vw); background:var(--ui-bg); padding:10px 12px; border-radius:14px; pointer-events:none}
 
   .quest{position:absolute; right:12px; top:12px; background:var(--ui-bg); padding:10px 12px; border-radius:14px; width:min(420px, 96vw);} 
@@ -71,6 +76,17 @@ Later patches (not in this edit):
   .window button{all:unset; background:linear-gradient(180deg, #1d2b3a, #13202c); border:1px solid rgba(255,255,255,.18); padding:8px 10px; border-radius:10px; cursor:pointer;}
   .window .close{position:absolute; right:10px; top:10px; opacity:.8}
   .pill{display:inline-block; padding:2px 8px; border-radius:999px; background:rgba(255,255,255,.08); font-size:11px; margin-left:6px}
+
+  /* Item icons */
+  .icon{width:26px; height:26px; display:inline-grid; place-items:center; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:6px; margin-right:8px}
+  .icon svg{width:20px; height:20px; display:block}
+
+  /* Character window */
+  #charWin .grid{display:grid; grid-template-columns: 1fr 1fr; gap:10px}
+  #charWin .paper{background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px}
+  #charWin .slots{display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:8px}
+  #charWin .slotrow{display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:6px}
+  #charWin .stats{display:grid; grid-template-columns: 1fr 1fr; gap:6px}
 
   /* Skills hotbar */
   .hotbar{position:absolute; left:50%; transform:translateX(-50%); bottom:70px; display:flex; gap:8px; pointer-events:auto}
@@ -97,6 +113,11 @@ Later patches (not in this edit):
   .panel small{color:#9fb; opacity:.85}
 
   .toast{position:fixed; left:50%; transform:translateX(-50%); top:12px; background:var(--ui-bg); padding:8px 12px; border-radius:12px; border:1px solid rgba(255,255,255,.12); display:none}
+
+  /* Character Creation */
+  .cc-grid{display:grid; grid-template-columns: 1fr 1fr; gap:14px}
+  .cc-field{display:flex; flex-direction:column; gap:6px}
+  .swatch{display:inline-block; width:26px; height:18px; border-radius:6px; border:1px solid rgba(255,255,255,.2); vertical-align:middle}
 </style>
 </head>
 <body>
@@ -108,10 +129,12 @@ Later patches (not in this edit):
       <div class="row" style="gap:12px">
         <div class="chip" id="zone">Adventure Plains</div>
         <div class="chip">Job <span id="job">Visitor</span></div>
+        <div class="chip">Name <span id="pname">—</span></div>
         <div class="chip">LV <span id="lv">1</span></div>
         <div class="chip">Gold <span id="gold">0</span> ✦</div>
         <div class="chip" id="mountChip" style="display:none">Cart 🚗</div>
       </div>
+      <div class="buffbar" id="buffbar" aria-label="active buffs"></div>
       <div class="row" style="margin-top:8px">
         <span style="width:42px; font-size:12px">HP</span>
         <div class="meter"><i class="hp" id="hp"></i></div>
@@ -141,7 +164,7 @@ Later patches (not in this edit):
         <span style="width:60px; font-size:12px">XP</span>
         <div class="meter"><i class="xp" id="xp"></i></div>
         <span class="chip">Next <span id="nextxp">50</span></span>
-        <span class="chip" style="margin-left:auto">Keys: <b>I</b> Inventory · <b>Alt+M</b> Shop · <b>Alt+L</b> Storage · <b>J</b> Jobs · <b>Alt+J</b> Job Guide · <b>Alt+A</b> Stats/Skills</span>
+         <span class="chip" style="margin-left:auto">Keys: <b>I</b> Inventory · <b>Alt+M</b> Shop · <b>Alt+L</b> Storage · <b>J</b> Jobs · <b>Alt+J</b> Job Guide · <b>Alt+A</b> Stats/Skills · <b>Alt+C</b> Character</span>
       </div>
     </div>
 
@@ -166,6 +189,48 @@ Later patches (not in this edit):
     </div>
   </div>
 
+  <!-- Character Creation Overlay -->
+  <div class="overlay" id="create" style="display:none">
+    <div class="panel">
+      <h2>Create Your Rosarian</h2>
+      <div class="cc-grid">
+        <div>
+          <div class="cc-field">
+            <label for="cc-name">Name</label>
+            <input id="cc-name" type="text" maxlength="16" placeholder="Enter a name" style="all:unset; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.14); padding:8px 10px; border-radius:10px" />
+          </div>
+          <div class="cc-field">
+            <label for="cc-outfit">Outfit Color</label>
+            <input id="cc-outfit" type="color" value="#2a6aa8" /> <span class="swatch" id="cc-outfit-s"></span>
+          </div>
+          <div class="cc-field">
+            <label for="cc-hair">Hair Color</label>
+            <input id="cc-hair" type="color" value="#3a2a1a" /> <span class="swatch" id="cc-hair-s"></span>
+          </div>
+          <div class="cc-field">
+            <label for="cc-skin">Skin Tone</label>
+            <input id="cc-skin" type="color" value="#f2d6c2" /> <span class="swatch" id="cc-skin-s"></span>
+          </div>
+           <div class="cc-field">
+            <label for="cc-wings">Wings Style</label>
+            <select id="cc-wings" style="all:unset; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.14); padding:8px 10px; border-radius:10px; color:#e6f2ff;">
+              <option value="butterfly">Butterfly</option>
+              <option value="angel">Angel</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <p style="opacity:.85">Tip: You can change gear and wings later. Your name can be changed from the Character window.</p>
+        </div>
+      </div>
+      <div class="actions" style="margin-top:12px">
+        <button id="cc-back">Back</button>
+        <button class="primary" id="cc-start">Start Adventure</button>
+      </div>
+    </div>
+  </div>
+
   <div class="window" id="invWin">
     <button class="close" id="invClose">✕</button>
     <h2>Inventory <span class="pill" id="invCount"></span></h2>
@@ -175,6 +240,7 @@ Later patches (not in this edit):
         <div class="chip">Boots: <span id="eqBoots">—</span></div>
         <div class="chip">Accessory: <span id="eqAcc">—</span></div>
         <div class="chip">Wings: <span id="eqWings">—</span></div>
+        <div class="chip">Gem: <span id="eqGem">—</span></div>
       </div>
     <div class="list" id="invList"></div>
   </div>
@@ -216,6 +282,28 @@ Later patches (not in this edit):
     </div>
   </div>
 
+  <div class="window" id="charWin">
+    <button class="close" id="charClose">✕</button>
+    <h2>Character <span class="pill">Alt+C</span></h2>
+    <div class="grid">
+      <div class="paper">
+        <h3 style="margin:2px 0 8px; font-size:14px">Equipment</h3>
+        <div class="slots">
+          <div class="slotrow"><span class="icon" id="charIconWeapon"></span><div><b>Weapon</b><div id="charWeapon">—</div></div></div>
+          <div class="slotrow"><span class="icon" id="charIconArmor"></span><div><b>Armor</b><div id="charArmor">—</div></div></div>
+          <div class="slotrow"><span class="icon" id="charIconBoots"></span><div><b>Boots</b><div id="charBoots">—</div></div></div>
+          <div class="slotrow"><span class="icon" id="charIconAcc"></span><div><b>Accessory</b><div id="charAcc">—</div></div></div>
+          <div class="slotrow"><span class="icon" id="charIconWings"></span><div><b>Wings</b><div id="charWings">—</div></div></div>
+          <div class="slotrow"><span class="icon" id="charIconGem"></span><div><b>Gem</b><div id="charGem">—</div></div></div>
+        </div>
+      </div>
+      <div class="paper">
+        <h3 style="margin:2px 0 8px; font-size:14px">Stats</h3>
+        <div class="stats" id="charStats"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 </div>
 
@@ -229,12 +317,17 @@ Later patches (not in this edit):
   const hpEl = el('hp'), mpEl = el('mp'), xpEl = el('xp');
   const lvEl = el('lv'), goldEl = el('gold'), nextxpEl = el('nextxp');
   const jobEl = el('job');
+  const pnameEl = el('pname');
+  const buffbarEl = el('buffbar');
   const eqWeapon = el('eqWeapon'), eqArmor=el('eqArmor'), eqBoots=el('eqBoots'), eqAcc=el('eqAcc');
-  const eqWings = el('eqWings');
+  const eqWings = el('eqWings'); const eqGem = el('eqGem');
   const invWin = el('invWin'), shopWin=el('shopWin'), jobWin=el('jobWin');
   const invList = el('invList'), shopList=el('shopList'), jobList=el('jobList');
   const invClose = el('invClose'), shopClose=el('shopClose'), jobClose=el('jobClose');
   const statsWin = el('statsWin'); const statsList = el('statsList'); const statsClose = el('statsClose');
+  const charWin = el('charWin'); const charClose = el('charClose');
+  const charWeapon = el('charWeapon'), charArmor = el('charArmor'), charBoots=el('charBoots'), charAcc=el('charAcc'), charWings=el('charWings'), charGem=el('charGem');
+  const charStats = el('charStats');
   const storageWin = el('storageWin'); const storInvList = el('storInvList'); const storBoxList = el('storBoxList'); const storageClose = el('storageClose'); const storageCount = el('storageCount');
   let jobGuideWin = null;
   const invCount=el('invCount');
@@ -244,6 +337,9 @@ Later patches (not in this edit):
   const questLine = el('quest-line'), questProg = el('quest-progress');
   const questReward = el('quest-reward');
   const overlay = el('overlay');
+  const createOv = el('create');
+  const ccName = el('cc-name'); const ccOutfit = el('cc-outfit'); const ccHair = el('cc-hair'); const ccSkin = el('cc-skin'); const ccWings = el('cc-wings');
+  const ccOutfitS = el('cc-outfit-s'); const ccHairS = el('cc-hair-s'); const ccSkinS = el('cc-skin-s');
   const toast = el('toast');
   const stick = el('stick'), knob = el('knob'), atkBtn = el('atk');
 
@@ -390,16 +486,25 @@ Later patches (not in this edit):
     steel_armor:{name:'Steel Armor', type:'gear', slot:'armor', hpMax:80, price:240},
     swift_boots:{name:'Swift Boots', type:'gear', slot:'boots', speed:80, price:220},
     rocket_launcher:{name:'Rocket Launcher', type:'gear', slot:'weapon', wep:'launcher', atk:28, aspd:1.2, price:420},
-    // Wings gear
-    butterfly_wings:{name:'Butterfly Wings', type:'gear', slot:'wings', speed:120, style:'butterfly', price:600},
-    angel_wings:{name:'Angel Wings', type:'gear', slot:'wings', speed:100, hpMax:40, style:'angel', price:700},
+    // Wings gear (rebalance)
+    butterfly_wings:{name:'Butterfly Wings', type:'gear', slot:'wings', speed:80, style:'butterfly', price:0},
+    dragon_worm_wings:{name:'Dragon Worm Wings', type:'gear', slot:'wings', speed:160, hpMax:60, style:'angel', price:260},
+    angel_wings:{name:'Angel Wings', type:'gear', slot:'wings', speed:120, hpMax:40, style:'angel', price:220},
     // Extra travel scrolls
     zant_scroll:{name:'Return Scroll: Zant', type:'consumable', teleport:'zant', spawnTag:'plaza', price:0},
     elver_scroll:{name:'Return Scroll: El Verloon Desert', type:'consumable', teleport:'elverloon', spawnTag:'oasis', price:0}
   };
-  const SHOP_STOCK_BASE=['potion_hp','potion_mp','wood_sword','wood_bow','wood_katar','wood_staff','wood_wand','leather_armor','runner_shoes','feather_charm','power_candy','rocket_launcher','butterfly_wings'];
-  const SHOP_STOCK_MID=['potion_hp','potion_mp','bronze_sword','oak_bow','fine_katar','battle_staff','mystic_wand','steel_armor','swift_boots','power_candy','butterfly_wings','angel_wings','zant_scroll'];
-  const SHOP_STOCK_HIGH=['potion_hp','potion_mp','iron_sword','composite_bow','fine_katar','battle_staff','mystic_wand','steel_armor','swift_boots','power_candy','angel_wings','elver_scroll'];
+  // Gem items (slot: gem)
+  Object.assign(ITEM_DB, {
+    t7:{name:'T7 Gem', type:'gear', slot:'gem', bonus:{int:5}, price:180},
+    g7:{name:'G7 Gem', type:'gear', slot:'gem', bonus:{dex:5}, price:180},
+    r7:{name:'R7 Gem', type:'gear', slot:'gem', bonus:{str:5}, price:180},
+    s7:{name:'S7 Gem', type:'gear', slot:'gem', bonus:{con:5}, price:180},
+    emerald7:{name:'Emerald 7', type:'gear', slot:'gem', bonus:{sen:5}, price:220}
+  });
+  const SHOP_STOCK_BASE=['potion_hp','potion_mp','wood_sword','wood_bow','wood_katar','wood_staff','wood_wand','leather_armor','runner_shoes','feather_charm','power_candy','rocket_launcher','dragon_worm_wings'];
+  const SHOP_STOCK_MID=['potion_hp','potion_mp','bronze_sword','oak_bow','fine_katar','battle_staff','mystic_wand','steel_armor','swift_boots','power_candy','dragon_worm_wings','angel_wings','zant_scroll'];
+  const SHOP_STOCK_HIGH=['potion_hp','potion_mp','iron_sword','composite_bow','fine_katar','battle_staff','mystic_wand','steel_armor','swift_boots','power_candy','angel_wings','dragon_worm_wings','elver_scroll'];
   function getShopStock(){
     if(mapName==='junon'){
       return player.level>=10? SHOP_STOCK_HIGH : SHOP_STOCK_MID;
@@ -411,16 +516,49 @@ Later patches (not in this edit):
     return Array.from(set);
   }
 
+  // Item icon inline SVG (minimal, readable)
+  function getItemIconSVG(id){
+    const it = ITEM_DB[id];
+    if(!it) return '';
+    const color = (c)=>c;
+    const svg=(path)=>`<svg viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`;
+    if(it.slot==='weapon' || it.wep){
+      if(it.wep==='sword') return svg(`<path fill="${color('#d9d9d9')}" d="M3 20l3 1 8-8-2-2-8 8z"/><rect fill="#999" x="12" y="5" width="8" height="3" rx="1"/>`);
+      if(it.wep==='bow') return svg(`<path fill="none" stroke="#d9e8a8" stroke-width="2" d="M6 4c8 6 8 10 0 16"/><path fill="#cfa" d="M5 11h10v2H5z"/>`);
+      if(it.wep==='katar') return svg(`<rect fill="#ccc" x="5" y="6" width="12" height="3"/><rect fill="#ccc" x="5" y="14" width="12" height="3"/>`);
+      if(it.wep==='staff') return svg(`<rect fill="#b98f5a" x="10" y="3" width="4" height="18" rx="1"/><circle fill="#8ee" cx="12" cy="5" r="3"/>`);
+      if(it.wep==='wand') return svg(`<rect fill="#b98f5a" x="11" y="7" width="3" height="12" rx="1"/><circle fill="#f6f" cx="12.5" cy="8" r="2"/>`);
+      if(it.wep==='launcher') return svg(`<rect fill="#888" x="6" y="9" width="12" height="6" rx="2"/><path fill="#f5a76e" d="M3 11h6v2H3z"/>`);
+    }
+    if(it.slot==='armor') return svg(`<rect fill="#7aa" x="5" y="5" width="14" height="14" rx="3"/>`);
+    if(it.slot==='boots') return svg(`<path fill="#aa7" d="M4 15h10v3H7a3 3 0 0 1-3-3z"/>`);
+    if(it.slot==='accessory') return svg(`<circle fill="#ffd24a" cx="12" cy="12" r="6"/>`);
+    if(it.slot==='wings') return svg(`<path fill="#9cf" d="M4 12c4-6 8-6 10-2-5 0-6 2-10 2z"/><path fill="#f9c" d="M4 12c4 2 5 4 10 4-2 4-6 2-10-4z"/>`);
+    if(it.slot==='gem' && it.bonus){
+      const key = Object.keys(it.bonus)[0];
+      const col = key==='str'? '#ff6b6b' : key==='dex'? '#71e6a2' : key==='int'? '#6ab3ff' : key==='con'? '#cfcfcf' : '#4ef3a2';
+      return svg(`<path fill="${col}" d="M12 3l6 6-6 12-6-12 6-6z"/>`);
+    }
+    if(it.type==='consumable' && /potion|drink/i.test(it.name)) return svg(`<rect fill="#6cf" x="7" y="5" width="10" height="14" rx="2"/><rect fill="#9cf" x="9" y="7" width="6" height="8"/>`);
+    if(it.type==='consumable' && /scroll/i.test(it.name)) return svg(`<path fill="#ddb" d="M6 6h12v10H6z"/><circle fill="#ccb" cx="6" cy="8" r="2"/><circle fill="#ccb" cx="18" cy="14" r="2"/>`);
+    if(id==='cart_pass') return svg(`<rect fill="#7ac" x="5" y="7" width="14" height="10" rx="2"/><rect fill="#9de" x="7" y="10" width="10" height="2"/>`);
+    return svg(`<circle fill="#cfe" cx="12" cy="12" r="6"/>`);
+  }
+
   // Player, Inventory & Equipment
   function makePlayer(){
     return {
       kind:'player', x:startPos.x, y:startPos.y, r:18, baseSpeed:150, speed:150, dir:0,
       hp:100, hpMax:100, mp:60, mpMax:60, level:1, xp:0, gold:0,
       atk:12, baseAtk:12, atkCd:0.24, atkTimer:0, projSpeed:430, alive:true,
-      inv:[], invCap:22, eq:{weapon:null, armor:null, boots:null, accessory:null, wings:null},
+      inv:[], invCap:22, eq:{weapon:null, armor:null, boots:null, accessory:null, wings:null, gem:null},
       buffs:[], hasCartPass:false, mounted:false,
       job:'Visitor', skills:[null,null,null,null], skillCd:[0,0,0,0], flags:{cartUnlocked:false},
-      statPoints: 0
+      statPoints: 0,
+      name: '',
+      appearance: { outfit:'#2a6aa8', hair:'#3a2a1a', skin:'#f2d6c2', wingsStyle:'butterfly' },
+      defBase: 0, mdefBase: 0, accBase: 0.78, critBonus: 0,
+      swingT: 0
     };
   }
   let player = makePlayer();
@@ -431,9 +569,27 @@ Later patches (not in this edit):
       const itemId = player.eq[k]; if(!itemId) continue; const it=ITEM_DB[itemId];
       if(it.atk) atk+=it.atk; if(it.hpMax) hpMax+=it.hpMax; if(it.speed) speed+=it.speed; if(it.aspd) atkCd*=it.aspd; if(it.mpMax) mpMax=(mpMax||player.mpMax)+it.mpMax;
     }
-    for(const b of player.buffs){ if(b.atk) atk+=b.atk; if(b.speed) speed+=b.speed; if(b.hpMax) hpMax+=b.hpMax; if(b.aspd) atkCd*=b.aspd; }
+    // Gem bonuses
+    if(player.eq.gem){ const g=ITEM_DB[player.eq.gem]; if(g){
+      const s = player.stats || (player.stats={str:0,dex:0,int:0,sen:0,con:0});
+      if(g.add){ // add is a function applying to stats-like bonuses
+        const bonus = g.add; if(bonus.int) s.int += bonus.int; if(bonus.dex) s.dex += bonus.dex; if(bonus.str) s.str += bonus.str; if(bonus.con) s.con += bonus.con; if(bonus.sen) s.sen += bonus.sen;
+      }
+    } }
+    // Derived defenses and rates
+    let def = player.defBase||0, mdef = player.mdefBase||0, acc = player.accBase||0.78, critAdd = 0;
+    for(const b of player.buffs){ if(b.atk) atk+=b.atk; if(b.speed) speed+=b.speed; if(b.hpMax) hpMax+=b.hpMax; if(b.aspd) atkCd*=b.aspd; if(b.def) def+=b.def; if(b.mdef) mdef+=b.mdef; if(b.acc) acc+=b.acc; if(b.crit) critAdd+=b.crit; }
+    // Stat influences
+    const s = player.stats || (player.stats={str:0,dex:0,int:0,sen:0,con:0});
+    atk = Math.round(atk + (s.str||0)*1.0);
+    speed += (s.dex||0) * 3.5;
+    acc += (s.con||0) * 0.015; // +1.5% per CON
+    critAdd += (s.sen||0) * 0.01 * 0; // SEN handled in calcDamage baseline; additive bonus via buffs
+    player.critBonus = critAdd;
+    player.def = Math.max(0, def);
+    player.mdef = Math.max(0, mdef);
     if(player.mounted){ speed += 120; }
-    player.atk = atk; player.hpMax = hpMax; player.speed = speed; player.atkCd = clamp(atkCd, 0.12, 0.5); player.mpMax = mpMax||player.mpMax;
+    player.atk = atk; player.hpMax = hpMax; player.speed = speed; player.atkCd = clamp(atkCd, 0.12, 0.5); player.mpMax = mpMax||player.mpMax; player.acc = clamp(acc, 0.05, 0.98);
     if(player.hp>player.hpMax) player.hp=player.hpMax;
     if(player.mp>player.mpMax) player.mp=player.mpMax;
   }
@@ -480,7 +636,21 @@ Later patches (not in this edit):
     notify('Equipped '+it.name); recalcStats(); save(); renderInventory();
   }
 
-  function statsText(it){ return [it.wep?it.wep.toUpperCase():'', it.atk?`ATK +${it.atk}`:'', it.hpMax?`HP +${it.hpMax}`:'', it.speed?`SPD +${it.speed}`:'', it.aspd?`ASPD x${it.aspd}`:'', it.mpMax?`MP +${it.mpMax}`:'', it.hp?`Heal ${it.hp}`:'', it.mp?`MP +${it.mp}`:'', it.dur?`${it.dur}s`:''].filter(Boolean).join(' · '); }
+  function statsText(it){
+    const parts=[
+      it.wep?it.wep.toUpperCase():'',
+      it.atk?`ATK +${it.atk}`:'',
+      it.hpMax?`HP +${it.hpMax}`:'',
+      it.speed?`SPD +${it.speed}`:'',
+      it.aspd?`ASPD x${it.aspd}`:'',
+      it.mpMax?`MP +${it.mpMax}`:'',
+      it.hp?`Heal ${it.hp}`:'',
+      it.mp?`MP +${it.mp}`:'',
+      it.dur?`${it.dur}s`:'',
+    ];
+    if(it.slot==='gem' && it.bonus){ const k=Object.keys(it.bonus)[0]; parts.push(`${k.toUpperCase()} +${it.bonus[k]}`); }
+    return parts.filter(Boolean).join(' · ');
+  }
 
   function renderInventory(){
     invCount.textContent = player.inv.length+"/"+player.invCap;
@@ -489,10 +659,12 @@ Later patches (not in this edit):
     eqBoots.textContent  = player.eq.boots? ITEM_DB[player.eq.boots].name: '—';
     eqAcc.textContent    = player.eq.accessory? ITEM_DB[player.eq.accessory].name: '—';
     if(eqWings) eqWings.textContent = player.eq.wings? ITEM_DB[player.eq.wings].name : '—';
-    invList.innerHTML='';
+    if(eqGem) eqGem.textContent = player.eq.gem? (ITEM_DB[player.eq.gem]?.name||'—') : '—';
+      invList.innerHTML='';
     player.inv.forEach((entry,i)=>{
       const it=ITEM_DB[entry.id];
-      const div=document.createElement('div'); div.className='item'; div.innerHTML=`<b>${it.name}</b> <span class="pill">${it.type}</span> ${entry.stack? `<span class="pill">x${entry.stack}</span>`:''}<div style="font-size:12px; opacity:.85; margin-top:4px">${statsText(it)}</div>`;
+        const icon = getItemIconSVG(entry.id);
+        const div=document.createElement('div'); div.className='item'; div.innerHTML=`<div style="display:flex;align-items:center"><span class="icon">${icon}</span><div><b>${it.name}</b> <span class="pill">${it.type}</span> ${entry.stack? `<span class="pill">x${entry.stack}</span>`:''}<div style="font-size:12px; opacity:.85; margin-top:4px">${statsText(it)}</div></div></div>`;
       const actions=document.createElement('div'); const btn=document.createElement('button'); btn.textContent = it.type==='gear'? 'Equip' : (it.type==='consumable'? 'Use' : 'Learn'); btn.onclick=()=>{ if(it.type==='gear') equipItem(i); else if(it.type==='consumable') useItem(i); else if(it.type==='vehicle') useItem(i); };
       actions.appendChild(btn); invList.appendChild(div); invList.appendChild(actions);
     });
@@ -502,7 +674,8 @@ Later patches (not in this edit):
   function closeInventory(){ invWin.style.display='none'; }
   function openShop(all=false){ shopGold.textContent = player.gold|0; shopList.innerHTML=''; (all? getAllShopStock() : getShopStock()).forEach(id=>{
       const it=ITEM_DB[id]; const div=document.createElement('div'); div.className='item';
-      div.innerHTML=`<b>${it.name}</b> <span class="pill">${it.type}</span> <span class="pill">${it.price}✦</span><div style="font-size:12px; opacity:.85; margin-top:4px">${statsText(it)}</div>`;
+      const icon = getItemIconSVG(id);
+      div.innerHTML=`<div style="display:flex;align-items:center"><span class="icon">${icon}</span><div><b>${it.name}</b> <span class="pill">${it.type}</span> <span class="pill">${it.price}✦</span><div style="font-size:12px; opacity:.85; margin-top:4px">${statsText(it)}</div></div></div>`;
       const actions=document.createElement('div'); const btn=document.createElement('button'); btn.textContent='Buy'; btn.onclick=()=>{ if(player.gold>=it.price){ player.gold-=it.price; addToInv(id,1); shopGold.textContent=player.gold|0; goldEl.textContent=player.gold|0; notify('Purchased '+it.name); } else notify('Not enough gold'); };
       actions.appendChild(btn); shopList.appendChild(div); shopList.appendChild(actions);
     }); shopWin.style.display='block'; shopList.scrollTop=0; ttsSay('Hello fellow rosarian, i have some items that may help ease your journey'); }
@@ -519,7 +692,8 @@ Later patches (not in this edit):
     storInvList.innerHTML='';
     player.inv.forEach((entry,i)=>{
       const it=ITEM_DB[entry.id]; if(!it) return;
-      const div=document.createElement('div'); div.className='item'; div.innerHTML=`<b>${it.name}</b> <span class="pill">${it.type}</span> ${entry.stack? `<span class="pill">x${entry.stack}</span>`:''}`;
+      const icon = getItemIconSVG(entry.id);
+      const div=document.createElement('div'); div.className='item'; div.innerHTML=`<div style="display:flex;align-items:center"><span class="icon">${icon}</span><div><b>${it.name}</b> <span class="pill">${it.type}</span> ${entry.stack? `<span class="pill">x${entry.stack}</span>`:''}</div></div>`;
       const actions=document.createElement('div'); const btn=document.createElement('button'); btn.textContent='Store'; btn.onclick=()=>{
         // Split stacks when possible
         if(entry.stack && entry.stack>1){ entry.stack--; storageBox.push({id:entry.id, stack:1}); }
@@ -531,7 +705,8 @@ Later patches (not in this edit):
     storBoxList.innerHTML='';
     storageBox.forEach((entry,i)=>{
       const it=ITEM_DB[entry.id]; if(!it) return;
-      const div=document.createElement('div'); div.className='item'; div.innerHTML=`<b>${it.name}</b> <span class="pill">${it.type}</span> ${entry.stack? `<span class="pill">x${entry.stack}</span>`:''}`;
+      const icon = getItemIconSVG(entry.id);
+      const div=document.createElement('div'); div.className='item'; div.innerHTML=`<div style=\"display:flex;align-items:center\"><span class=\"icon\">${icon}</span><div><b>${it.name}</b> <span class=\"pill\">${it.type}</span> ${entry.stack? `<span class=\\"pill\\">x${entry.stack}</span>`:''}</div></div>`;
       const actions=document.createElement('div'); const btn=document.createElement('button'); btn.textContent='Withdraw'; btn.onclick=()=>{
         if(it.type==='consumable' && entry.stack && entry.stack>1){ entry.stack--; addToInv(entry.id,1); }
         else { addToInv(entry.id, entry.stack||1); storageBox.splice(i,1); }
@@ -540,6 +715,48 @@ Later patches (not in this edit):
     });
   }
   function openStorage(){ storageWin.style.display='block'; renderStorage(); }
+
+  // Character window rendering
+  function iconForEq(id){ return id? getItemIconSVG(id) : ''; }
+  function openCharacter(){
+    if(!charWin) return;
+    charWeapon.textContent = player.eq.weapon? ITEM_DB[player.eq.weapon].name : '—';
+    charArmor.textContent  = player.eq.armor? ITEM_DB[player.eq.armor].name : '—';
+    charBoots.textContent  = player.eq.boots? ITEM_DB[player.eq.boots].name : '—';
+    charAcc.textContent    = player.eq.accessory? ITEM_DB[player.eq.accessory].name : '—';
+    charWings.textContent  = player.eq.wings? ITEM_DB[player.eq.wings].name : '—';
+    charGem.textContent    = player.eq.gem? ITEM_DB[player.eq.gem]?.name || '—' : '—';
+    // icons
+    const setIcon=(elId,id)=>{ const elx=document.getElementById(elId); if(elx) elx.innerHTML = iconForEq(id); };
+    setIcon('charIconWeapon', player.eq.weapon);
+    setIcon('charIconArmor', player.eq.armor);
+    setIcon('charIconBoots', player.eq.boots);
+    setIcon('charIconAcc', player.eq.accessory);
+    setIcon('charIconWings', player.eq.wings);
+    setIcon('charIconGem', player.eq.gem);
+    // stats grid
+    const s = player.stats || (player.stats={str:0,dex:0,int:0,sen:0,con:0});
+    const lines = [
+      ['Name', String(player.name||'Rosarian')],
+      ['LV', String(player.level)],
+      ['Attack Power', String(player.atk|0)],
+      ['HP', `${player.hp|0}/${player.hpMax|0}`],
+      ['MP', `${player.mp|0}/${player.mpMax|0}`],
+      ['Attack Speed', (player.atkCd? (1/player.atkCd).toFixed(2)+' /s' : '—')],
+      ['Movement Speed', String(Math.round(player.speed))],
+      ['Magic Defense', String(player.mdef|0)],
+      ['Accuracy', ((player.acc||0.78)*100|0)+'%'],
+      ['STR', String(s.str||0)],
+      ['DEX', String(s.dex||0)],
+      ['INT', String(s.int||0)],
+      ['SEN', String(s.sen||0)],
+      ['CON', String(s.con||0)],
+    ];
+    charStats.innerHTML = lines.map(([k,v])=>`<div class="chip" style="display:flex;justify-content:space-between"><span>${k}</span><b>${v}</b></div>`).join('');
+    charWin.style.display='block';
+  }
+  function closeCharacter(){ if(charWin) charWin.style.display='none'; }
+  if(charClose) charClose.onclick = closeCharacter;
 
   function ensureJobGuideEl(){
     if(jobGuideWin) return jobGuideWin;
@@ -566,12 +783,12 @@ Later patches (not in this edit):
     statsList.innerHTML = '';
     const pts = player.statPoints|0;
     const header=document.createElement('div'); header.className='item'; header.innerHTML = `<b>Points Available</b> <span class="pill">${pts}</span>`; statsList.appendChild(header); statsList.appendChild(document.createElement('div'));
-    const mkRow=(label,key,desc)=>{ const wrap=document.createElement('div'); wrap.className='item'; wrap.innerHTML=`<b>${label}</b> <span class="pill">${s[key]}</span> <span class="pill" style="opacity:.8">${desc}</span>`; const actions=document.createElement('div'); const plus=document.createElement('button'); plus.textContent='+1'; plus.disabled = (player.statPoints|0) <= 0; plus.onclick=()=>{ if(player.statPoints>0){ s[key]++; player.statPoints--; recalcStats(); save(); openSkills(); } }; actions.appendChild(plus); statsList.appendChild(wrap); statsList.appendChild(actions); };
-    mkRow('STR','str','Increases physical attack and max HP with some weapons.');
-    mkRow('DEX','dex','Increases movement speed and boosts bows/katars.');
-    mkRow('INT','int','Increases magic damage and MP-based skills.');
-    mkRow('SEN','sen','Increases critical chance and item find.');
-    mkRow('CON','con','Increases accuracy; reduces chance to miss attacks.');
+    const mkRow=(label,key,desc)=>{ const wrap=document.createElement('div'); wrap.className='item'; wrap.innerHTML=`<b>${label}</b> <span class=\"pill\">${s[key]}</span> <span class=\"pill\" style=\"opacity:.8\">${desc}</span>`; const actions=document.createElement('div'); const plus=document.createElement('button'); plus.textContent='+1'; plus.disabled = (player.statPoints|0) <= 0; plus.onclick=()=>{ if(player.statPoints>0){ s[key]++; player.statPoints--; recalcStats(); save(); openSkills(); } }; actions.appendChild(plus); statsList.appendChild(wrap); statsList.appendChild(actions); };
+    mkRow('STR','str','Attack Power');
+    mkRow('DEX','dex','Movement/Attack Speed');
+    mkRow('INT','int','Magic Power');
+    mkRow('SEN','sen','Critical & Luck');
+    mkRow('CON','con','Accuracy');
     statsWin.style.display='block';
   }
 
@@ -635,17 +852,21 @@ Later patches (not in this edit):
   // Combat helpers: damage calc and floating numbers
   function calcDamage(base, kind){
     const s = player.stats || (player.stats={str:0,dex:0,int:0,sen:0,con:0});
+    // include gem passive bonuses in calc realtime (non-persistent)
+    if(player.eq.gem){ const g=ITEM_DB[player.eq.gem]; if(g && g.bonus){
+      const b=g.bonus; if(b.str) base += b.str*1.0; // physical power boost via STR
+    } }
     let dmg = base;
     if(kind==='magic') dmg += (s.int||0) * 1.2;
     let crit = false;
-    const chance = Math.min(0.5, 0.05 + 0.01 * (s.sen||0));
+    const chance = Math.min(0.7, 0.05 + 0.01 * (s.sen||0) + (player.critBonus||0));
     if(Math.random() < chance){ crit = true; dmg *= 1.75; }
     return { dmg: Math.max(1, Math.round(dmg)), crit };
   }
   function rollHitAgainst(target){
-    const s = player.stats || (player.stats={str:0,dex:0,int:0,sen:0,con:0});
-    // Base 78% chance to hit, +1.5% per CON, small penalty for quick enemies
-    const base = 0.78 + 0.015 * (s.con||0);
+    // Accuracy is a derived stat now (acc)
+    let base = player.acc || 0.78;
+    if(player.eq.gem){ const g=ITEM_DB[player.eq.gem]; if(g && g.bonus && g.bonus.con){ base += 0.015 * g.bonus.con; } }
     const evasion = clamp(((target.speed||80) - 80) / 400, -0.05, 0.15); // -5%..+15%
     const chance = clamp(base - evasion, 0.05, 0.98);
     return Math.random() < chance;
@@ -661,6 +882,7 @@ Later patches (not in this edit):
         for(const m of ents){ if(!m.alive) continue; const a=Math.atan2(m.y-player.y,m.x-player.x); let da=Math.atan2(Math.sin(a-a0),Math.cos(a-a0)); if(Math.abs(da)<0.9 && dist(player.x,player.y,m.x,m.y)<radius){ if(rollHitAgainst(m)){ const out=calcDamage(base,'physical'); m.hp-=out.dmg; showDamage(m.x,m.y,out.dmg,out.crit); m.hurt=0.12; if(m.hp<=0){ m.alive=false; onMobKilled(m);} } else { showMiss(m.x,m.y); } }
         }
         fx.push({t:0.18, kind:'arc', x:player.x, y:player.y, a:a0, r:radius});
+        player.swingT = 0.3;
       }, k*90);
     }
   }
@@ -740,6 +962,7 @@ Later patches (not in this edit):
     if(e.altKey && (e.key==='M' || k==='m')){ if(shopWin.style.display==='block'){ shopWin.style.display='none'; } else { openShop(true); } }
     if(e.altKey && (e.key==='L' || k==='l')){ if(storageWin.style.display==='block'){ storageWin.style.display='none'; } else { openStorage(); } }
     if(e.altKey && (e.key==='J' || k==='j')){ openJobGuide(); }
+    if(e.altKey && (e.key==='C' || k==='c')){ if(charWin && charWin.style.display==='block'){ closeCharacter(); } else { openCharacter(); } }
     if(e.altKey && (e.key==='T' || k==='t')){ TTS_ENABLED=!TTS_ENABLED; saveTTS(); notify('TTS '+(TTS_ENABLED?'ON':'OFF')); }
     if(k==='i'){ openInventory(); }
     if(k==='m'){ if(nearest(merchant) < TILE*1.8) openShop(); else notify('Find the Merchant (🛒)'); }
@@ -763,12 +986,24 @@ Later patches (not in this edit):
   atkBtn.addEventListener('touchend',   e=>{e.preventDefault(); mouse.down=false;});
 
   // UI Buttons
-  el('newgame').onclick=()=>{ erase(); startNew(); hideOverlay(); }; 
+  el('newgame').onclick=()=>{ hideOverlay(); showCreate(); }; 
+  // Character creation controls
+  const ccStartBtn = el('cc-start');
+  const ccBackBtn  = el('cc-back');
+  if(ccStartBtn){ ccStartBtn.onclick = ()=>{ startNew(); }; }
+  if(ccBackBtn){ ccBackBtn.onclick = ()=>{ hideCreate(); showOverlay(); }; }
   el('continue').onclick=()=>{ if(load()) { hideOverlay(); recalcStats(); setSkillsForJob(player.job); } else { startNew(); hideOverlay(); } };
   el('erase').onclick=()=>{ erase(); notify('Save erased'); };
 
   function hideOverlay(){ overlay.style.display='none'; }
   function showOverlay(){ overlay.style.display='grid'; }
+  function showCreate(){
+    if(ccOutfitS){ ccOutfitS.style.background = ccOutfit.value; }
+    if(ccHairS){ ccHairS.style.background = ccHair.value; }
+    if(ccSkinS){ ccSkinS.style.background = ccSkin.value; }
+    createOv.style.display='grid';
+  }
+  function hideCreate(){ createOv.style.display='none'; }
 
   function notify(msg){ toast.textContent=msg; toast.style.display='block'; clearTimeout(notify.t); notify.t=setTimeout(()=>toast.style.display='none', 1800); }
   function vibrate(ms){ if(navigator.vibrate) navigator.vibrate(ms); }
@@ -777,10 +1012,22 @@ Later patches (not in this edit):
     player = makePlayer();
     player.stats = {str:0,dex:0,int:0,sen:0};
     player.statPoints = 5;
+    // Character creation selections
+    if(typeof ccName!=='undefined'){
+      const nm = (ccName.value||'').trim(); player.name = nm? nm : 'Rosarian';
+      player.appearance.outfit = ccOutfit.value||'#2a6aa8';
+      player.appearance.hair = ccHair.value||'#3a2a1a';
+      player.appearance.skin = ccSkin.value||'#f2d6c2';
+      player.appearance.wingsStyle = (ccWings.value||'butterfly');
+      if(player.appearance.wingsStyle==='angel') player.eq.wings='dragon_worm_wings';
+      else if(player.appearance.wingsStyle==='butterfly') player.eq.wings='butterfly_wings';
+      else player.eq.wings=null;
+    }
     recalcStats(); setSkillsForJob(player.job);
     qIndex=0; quests.forEach(q=>{q.prog=0; q.done=false;}); cartQuest.active=false; cartQuest.paid=false; cartQuest.pumpkins=0;
     ents.length=0; projs.length=0; drops.length=0; turrets.length=0; fx.length=0; summonedCart=null;
     addToInv('wood_sword',1);
+    // Wings handled via CC
     for(let i=0;i<120;i++){
       const t = i%3===0? 'jelly' : (i%3===1? 'pumpkin':'flanae');
       const x = rand(TILE*8, TILE*(MAP_W-8));
@@ -790,6 +1037,7 @@ Later patches (not in this edit):
     (function spawnBoss(){ let tries=0; while(tries++<50){ const x=rand(TILE*20, TILE*(MAP_W-12)); const y=rand(TILE*18, TILE*(MAP_H-12)); if(dist(x,y,startPos.x,startPos.y)>TILE*25){ spawnMob('jellyking',x,y); break; } }})();
     mapName='plains'; genPlains(); saveMeta();
     save();
+    hideCreate();
   }
 
   // Save/Load (use v2 key, fallback to v3 to not break old saves)
@@ -798,7 +1046,7 @@ Later patches (not in this edit):
 
   function save(){
     saveMeta();
-    const data={p:{x:player.x,y:player.y,hp:player.hp,mp:player.mp,level:player.level,xp:player.xp,gold:player.gold,baseAtk:player.baseAtk,eq:player.eq,inv:player.inv,mounted:player.mounted,job:player.job,flags:player.flags,stats:player.stats,statPoints:player.statPoints}, q:quests.map(q=>({id:q.id,prog:q.prog,done:q.done})), idx:qIndex, cartQuest};
+    const data={p:{x:player.x,y:player.y,hp:player.hp,mp:player.mp,level:player.level,xp:player.xp,gold:player.gold,baseAtk:player.baseAtk,eq:player.eq,inv:player.inv,mounted:player.mounted,job:player.job,flags:player.flags,stats:player.stats,statPoints:player.statPoints,name:player.name,appearance:player.appearance,defBase:player.defBase,mdefBase:player.mdefBase}, q:quests.map(q=>({id:q.id,prog:q.prog,done:q.done})), idx:qIndex, cartQuest};
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   }
 
@@ -813,6 +1061,8 @@ Later patches (not in this edit):
       if(!player.flags) player.flags={};
       if(!player.stats) player.stats = {str:0,dex:0,int:0,sen:0};
       if(player.statPoints==null) player.statPoints = 0;
+      player.name = player.name || 'Rosarian';
+      player.appearance = player.appearance || {outfit:'#2a6aa8', hair:'#3a2a1a', skin:'#f2d6c2', wingsStyle:(player.eq && player.eq.wings)?'butterfly':'none'};
       quests.forEach(q=>{ const st=(d.q||[]).find(x=>x.id===q.id); if(st){ q.prog=st.prog||0; q.done=!!st.done; } else { q.prog=0; q.done=false; } });
       qIndex=d.idx||0; if(d.cartQuest){ Object.assign(cartQuest, d.cartQuest); }
       recalcStats(); setSkillsForJob(player.job||'Visitor');
@@ -926,18 +1176,26 @@ Later patches (not in this edit):
     const s=worldToScreen(n.x,n.y + bob);
     if(n.npc==='cart') { drawCart(n); return; }
     const def = NPC_SPRITES[n.npc] || {base:'#3a4b5f', glyph:'?'};
-    // soft blob shadow
+    // soft shadow
     ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(s.x, s.y+14, 16, 8, 0, 0, Math.PI*2); ctx.fill();
-    // bubble body
-    ctx.fillStyle=def.base; ctx.beginPath(); ctx.arc(s.x, s.y, 18, 0, 6.28); ctx.fill();
-    // outline for clarity
-    ctx.strokeStyle='rgba(255,255,255,0.08)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(s.x, s.y, 18, 0, 6.28); ctx.stroke();
-    // glyph
-    ctx.fillStyle='#fff'; ctx.font='16px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; if(def.glyph) ctx.fillText(def.glyph, s.x, s.y+1);
-    // interaction hint
-    ctx.fillStyle='rgba(255,255,255,0.85)'; ctx.font='12px system-ui';
+    // simplified humanoid sprite (distinct from player by proportions and palette)
+    ctx.save(); ctx.translate(s.x, s.y);
+    const outfit = def.base;
+    const skin = '#e6d2b5';
+    const gBody = ctx.createLinearGradient(-9, -22, 9, 12); gBody.addColorStop(0, outfit); gBody.addColorStop(1, '#273544');
+    ctx.fillStyle = gBody; ctx.beginPath(); ctx.roundRect(-9, -12, 18, 24, 4); ctx.fill();
+    ctx.fillStyle = '#223'; ctx.fillRect(-9, 8, 7, 8); ctx.fillRect(2, 8, 7, 8);
+    // head
+    ctx.fillStyle = skin; ctx.beginPath(); ctx.arc(0, -18, 7, 0, Math.PI*2); ctx.fill();
+    // chest glyph/icon for role
+    ctx.fillStyle = '#fff'; ctx.font='12px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; if(def.glyph) ctx.fillText(def.glyph, 0, -2);
+    ctx.restore();
+    // nameplate + interaction hint
+    ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.font='12px system-ui';
+    const label = n.npc==='merchant'? 'Merchant' : n.npc==='storage'? 'Storage' : n.npc==='cartmaster'? 'Cart Master' : n.npc==='trainer'? 'Smith' : n.npc==='sign'? 'Quest' : (n.npc==='harbor'||n.npc==='ferryJ')? 'Travel Boat' : n.npc==='portal'? 'Portal' : '';
+    if(label){ ctx.save(); ctx.textAlign='center'; ctx.textBaseline='alphabetic'; ctx.strokeStyle='rgba(0,0,0,0.55)'; ctx.lineWidth=4; ctx.strokeText(label, s.x, s.y-30); ctx.fillStyle='#cfe'; ctx.fillText(label, s.x, s.y-30); ctx.restore(); }
     const hint = (n.npc==='harbor'||n.npc==='ferryJ')? '⛵ E' : (n.npc==='portal'? '🌀 E' : 'E');
-    ctx.fillText(hint, s.x, s.y-24);
+    ctx.fillText(hint, s.x, s.y-20);
   }
   function drawNPCSprites(){
     const list=[sign, merchant, trainer, storageNPC, cartMaster];
@@ -1137,6 +1395,7 @@ Later patches (not in this edit):
       player.statPoints = (player.statPoints|0) + 3;
       recalcStats();
       notify('Level Up! Lv '+player.level);
+      if(player.level%5===0){ spawnBuffFairies(); }
     }
     save();
   }
@@ -1203,6 +1462,32 @@ Later patches (not in this edit):
       if(Math.random()<0.05) rolls.push('angel_wings');
     }
     for(const id of rolls){ if(id==='potion_hp' || id==='potion_mp'){ drops.push({x:m.x+rand(-12,12), y:m.y+rand(-12,12), t:0, item:id, stack: (Math.random()<0.5?2:1)}); } else { drops.push({x:m.x+rand(-12,12), y:m.y+rand(-12,12), t:0, item:id}); } }
+  }
+
+  // Buff Fairies — spawn around player every 5 levels
+  function spawnBuffFairies(){
+    const defs=[
+      {icon:'🗡️', desc:'Attack Power +8 (120s)', apply:()=>({atk:8}), col:'#ffd24a', glyph:'🗡️'},
+      {icon:'🛡️', desc:'Defense +6 (120s)', apply:()=>({def:6}), col:'#9cf', glyph:'🛡️'},
+      {icon:'💨', desc:'Move Speed +100 (120s)', apply:()=>({speed:100}), col:'#71e6a2', glyph:'💨'},
+      {icon:'🎯', desc:'Accuracy +8% (120s)', apply:()=>({acc:0.08}), col:'#cfe', glyph:'🎯'},
+      {icon:'✨', desc:'Critical Chance +8% (120s)', apply:()=>({crit:0.08}), col:'#f9c', glyph:'✨'},
+    ];
+    let angle=0;
+    defs.forEach((d,i)=>{
+      const a = angle + i*(Math.PI*2/defs.length);
+      const x = player.x + Math.cos(a)*60;
+      const y = player.y + Math.sin(a)*60;
+      // Visual fairy FX
+      fx.push({t:6, kind:'fairy', x, y, seed:Math.random()*10, col:d.col, glyph:d.glyph});
+      // On-touch pickup
+      setTimeout(()=>{
+        // Grant buff immediately on spawn and show icon in HUD
+        const buff = Object.assign({t:120, icon:d.icon, desc:d.desc}, d.apply());
+        player.buffs.push(buff);
+        recalcStats(); notify('Fairy Blessing: '+d.desc);
+      }, 300 + i*150);
+    });
   }
 
   function questKillCredit(type){
@@ -1280,7 +1565,12 @@ Later patches (not in this edit):
     if(questReward) questReward.textContent = 'Rewards: ' + rewardText(q) + ' — spend gold at the Merchant (🛒).';
   }
 
-  function dmgPlayer(d){ player.hp -= d; if(player.hp<0) player.hp= -1; }
+  function dmgPlayer(d, kind){
+    const reduction = (kind==='magic') ? (player.mdef||0) : (player.def||0);
+    const final = Math.max(0, d - reduction);
+    player.hp -= final;
+    if(player.hp<0) player.hp= -1;
+  }
 
   // Main loop
   let lt = now();
@@ -1391,6 +1681,16 @@ Later patches (not in this edit):
     Renderer.draw.drawFX();
     Renderer.draw.drawOverlay();
     Renderer.endFrame();
+    // HUD dynamic elements
+    // Name
+    if(pnameEl) pnameEl.textContent = player.name||'Rosarian';
+    // Buff icons
+    if(buffbarEl){
+      buffbarEl.innerHTML = '';
+      for(const b of player.buffs){
+        const span = document.createElement('span'); span.className='buff'; span.textContent = b.icon||'✨'; span.title = b.desc||'Buff'; buffbarEl.appendChild(span);
+      }
+    }
   }
 
   // Backing implementations (Canvas for now)
@@ -1467,6 +1767,15 @@ Later patches (not in this edit):
       } else if(f.kind==='miss'){
         const s=worldToScreen(f.x,f.y);
         ctx.save(); ctx.font='bold 18px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#ff8b73'; ctx.globalAlpha=0.9; ctx.fillText('MISS', s.x, s.y-22); ctx.restore();
+      } else if(f.kind==='fairy'){
+        const s=worldToScreen(f.x,f.y);
+        const bob = Math.sin(performance.now()/400 + f.seed)*4;
+        ctx.save();
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = f.col || '#cfa';
+        ctx.beginPath(); ctx.arc(s.x, s.y - 20 + bob, 8, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font='12px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(f.glyph||'✨', s.x, s.y - 20 + bob);
+        ctx.restore();
       }
     }
     // Job trainer guide arrow
@@ -1516,12 +1825,15 @@ Later patches (not in this edit):
   // Sprite helpers (PATCH 4)
   function drawPlayer(){
     const s = worldToScreen(player.x, player.y);
+    // Soft blob shadow with depth based on vertical position for fake 3D grounding
     ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(s.x, s.y+16, 16, 8, 0, 0, Math.PI*2); ctx.fill();
-    ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(player.dir);
+    ctx.save(); ctx.translate(s.x, s.y);
+    // Body tilt towards aim for depth
+    const aim = getAimDir(); const tilt = Math.sin(aim)*0.08; ctx.rotate(tilt);
     // Wings (draw behind body)
     if(player.eq && player.eq.wings){
       ctx.save();
-      const style = ITEM_DB[player.eq.wings]?.style || 'butterfly';
+      const style = player.appearance?.wingsStyle || ITEM_DB[player.eq.wings]?.style || 'butterfly';
       ctx.globalAlpha = 0.92;
       if(style==='angel'){
         ctx.fillStyle = 'rgba(240,245,255,0.95)';
@@ -1540,16 +1852,37 @@ Later patches (not in this edit):
       }
       ctx.restore();
     }
-    ctx.fillStyle = '#2a6aa8'; ctx.fillRect(-10, -14, 20, 28);
-    ctx.fillStyle = '#f2d6c2'; ctx.beginPath(); ctx.arc(0, -24, 8, 0, Math.PI*2); ctx.fill();
+    // 3D-ish shaded body
+    const outfit = player.appearance?.outfit || '#2a6aa8';
+    const skin = player.appearance?.skin || '#f2d6c2';
+    const gBody = ctx.createLinearGradient(-10, -28, 10, 14); gBody.addColorStop(0, outfit); gBody.addColorStop(1, '#1a3b5e');
+    ctx.fillStyle = gBody; ctx.beginPath(); ctx.roundRect(-10, -14, 20, 28, 4); ctx.fill();
+    const gHead = ctx.createRadialGradient(0, -26, 2, 0, -24, 10); gHead.addColorStop(0, '#fff6'); gHead.addColorStop(1, skin);
+    ctx.fillStyle = gHead; ctx.beginPath(); ctx.arc(0, -24, 8, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = '#334'; ctx.fillRect(-10, 10, 8, 10); ctx.fillRect(2, 10, 8, 10);
-    ctx.fillStyle = '#f2d6c2'; ctx.fillRect(10, -10, 10, 6); ctx.fillRect(-20, -10, 10, 6);
-    const wep = getEquippedWeaponType(); ctx.fillStyle = '#d9d9d9';
+    // Arms with skin tone
+    ctx.fillStyle = skin; ctx.fillRect(10, -10, 10, 6); ctx.fillRect(-20, -10, 10, 6);
+    const wep = getEquippedWeaponType();
+    // Animate melee swing tilt
+    const tNow = performance.now()/1000; if(player.swingT>0) player.swingT = Math.max(0, player.swingT-0.016);
+    const swing = Math.sin((1-player.swingT)*Math.PI)*0.5;
+    ctx.save(); ctx.rotate(aim + (wep==='sword'||wep==='katar'? (swing*0.5):0));
+    ctx.translate(0,0);
+    ctx.fillStyle = '#d9d9d9';
     if(wep==='sword'){ ctx.fillRect(14, -14, 4, 26); ctx.fillRect(10, -12, 12, 4); }
     else if(wep==='bow'){ ctx.strokeStyle = '#cfa'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(16, -16); ctx.quadraticCurveTo(28, 0, 16, 16); ctx.stroke(); }
     else if(wep==='katar'){ ctx.fillRect(12, -6, 12, 4); ctx.fillRect(12, 2, 12, 4); }
     else if(wep==='staff'){ ctx.fillStyle = '#b98f5a'; ctx.fillRect(8, -22, 6, 40); ctx.fillStyle = '#8ee'; ctx.beginPath(); ctx.arc(11, -24, 6, 0, Math.PI*2); ctx.fill(); }
     else if(wep==='wand'){ ctx.fillStyle = '#b98f5a'; ctx.fillRect(12, -10, 6, 22); ctx.fillStyle = '#f6f'; ctx.beginPath(); ctx.arc(15, -12, 4, 0, Math.PI*2); ctx.fill(); }
+    ctx.restore();
+    // Rim light
+    ctx.globalAlpha=0.25; ctx.strokeStyle='#9cf'; ctx.beginPath(); ctx.arc(0,-24,8, -0.8, 0.3); ctx.stroke(); ctx.globalAlpha=1;
+    ctx.restore();
+    // Player nameplate above head
+    ctx.save();
+    ctx.textAlign='center'; ctx.textBaseline='alphabetic'; ctx.font='12px system-ui';
+    ctx.strokeStyle='rgba(0,0,0,0.55)'; ctx.lineWidth=4; ctx.strokeText(player.name||'Rosarian', s.x, s.y-38);
+    ctx.fillStyle='#e6f2ff'; ctx.fillText(player.name||'Rosarian', s.x, s.y-38);
     ctx.restore();
   }
 
