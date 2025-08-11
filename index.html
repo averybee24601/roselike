@@ -150,7 +150,7 @@ Later patches (not in this edit):
   }
   /* Character preview inside creator */
   .cc-preview-wrap{ background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:8px; display:grid; place-items:center; }
-  #cc-preview{ width:100%; max-width:360px; aspect-ratio:1; background: radial-gradient(60% 60% at 50% 70%, #2b3b2a, #1a231a 60%); border-radius:10px; }
+  #cc-preview{ width:100%; max-width:360px; aspect-ratio:1; background: radial-gradient(220px 140px at 50% 75%, rgba(0,0,0,0.35), rgba(0,0,0,0) 70%), linear-gradient(180deg, #0a0f14 55%, #5b3b22 55% 58%, #2e1d12 100%); border-radius:10px; }
 </style>
 </head>
 <body>
@@ -637,7 +637,7 @@ Later patches (not in this edit):
   let player = makePlayer();
 
   function recalcStats(){
-    let atk=player.baseAtk, hpMax=100, speed=player.baseSpeed, atkCd=0.24, mpMax=player.mpMax;
+    let atk=player.baseAtk, hpMax=100, speed=player.baseSpeed, atkCd=0.34, mpMax=player.mpMax;
     for(const k of ['weapon','helmet','armor','boots','accessory','wings','shield']){
       const itemId = player.eq[k]; if(!itemId) continue; const it=ITEM_DB[itemId];
       let mult = 1 + ((it.refine|0) * 0.06); // +6% stats per refine level
@@ -658,13 +658,16 @@ Later patches (not in this edit):
     const s = player.stats || (player.stats={str:0,dex:0,int:0,sen:0,con:0});
     atk = Math.round(atk + (s.str||0)*1.0);
     speed += (s.dex||0) * 3.5;
+    // DEX increases attack speed meaning lower cooldown
+    const dex = (s.dex||0);
+    atkCd = Math.max(0.18, atkCd * (1 - Math.min(0.35, dex*0.02)));
     acc += (s.con||0) * 0.015; // +1.5% per CON
     critAdd += (s.sen||0) * 0.01 * 0; // SEN handled in calcDamage baseline; additive bonus via buffs
     player.critBonus = critAdd;
     player.def = Math.max(0, def);
     player.mdef = Math.max(0, mdef);
     if(player.mounted){ speed += 120; }
-    player.atk = atk; player.hpMax = hpMax; player.speed = speed; player.atkCd = clamp(atkCd, 0.12, 0.5); player.mpMax = mpMax||player.mpMax; player.acc = clamp(acc, 0.05, 0.98);
+    player.atk = atk; player.hpMax = hpMax; player.speed = speed; player.atkCd = clamp(atkCd, 0.12, 0.7); player.mpMax = mpMax||player.mpMax; player.acc = clamp(acc, 0.05, 0.98);
     if(player.hp>player.hpMax) player.hp=player.hpMax;
     if(player.mp>player.mpMax) player.mp=player.mpMax;
   }
@@ -1166,8 +1169,13 @@ Later patches (not in this edit):
       );
       // Starting weapon selection
       const choice = ccWeaponSel? ccWeaponSel.value : 'wood_sword';
-      if(choice==='wood_sword_shield'){ addToInv('wood_sword',1); addToInv('wood_shield',1); }
-      else { addToInv(choice,1); }
+      // Auto-equip chosen starter gear instead of placing in inventory
+      if(choice==='wood_sword_shield'){
+        player.eq.weapon = 'wood_sword';
+        player.eq.shield = 'wood_shield';
+      } else {
+        player.eq.weapon = choice;
+      }
     }
     recalcStats(); setSkillsForJob(player.job);
     qIndex=0; quests.forEach(q=>{q.prog=0; q.done=false;}); cartQuest.active=false; cartQuest.paid=false; cartQuest.pumpkins=0;
@@ -1200,11 +1208,11 @@ Later patches (not in this edit):
     if(!ccPreview || !ccPreview.ctx) return;
     const ctxp = ccPreview.ctx; const w=ccPreview.width, h=ccPreview.height; const cx=w/2, cy=h*0.62;
     ctxp.clearRect(0,0,w,h);
-    // Treehouse floor
-    const grd = ctxp.createLinearGradient(0, h*0.55, 0, h); grd.addColorStop(0,'#5a3a22'); grd.addColorStop(1,'#2c1c12');
-    ctxp.fillStyle=grd; ctxp.fillRect(0,h*0.55,w,h);
-    // Background foliage
-    ctxp.fillStyle='rgba(70,110,80,0.4)'; for(let i=0;i<18;i++){ const x=Math.random()*w, y=Math.random()*h*0.5; ctxp.beginPath(); ctxp.arc(x,y,8+Math.random()*18,0,6.28); ctxp.fill(); }
+    // Scene background: match in-game map style with a polished vignette
+    const sky=ctxp.createLinearGradient(0,0,0,h*0.6); sky.addColorStop(0,'#0b1a24'); sky.addColorStop(1,'#0a1218'); ctxp.fillStyle=sky; ctxp.fillRect(0,0,w,h*0.55);
+    const ground=ctxp.createLinearGradient(0,h*0.55,0,h); ground.addColorStop(0,'#5b3b22'); ground.addColorStop(1,'#2e1d12'); ctxp.fillStyle=ground; ctxp.fillRect(0,h*0.55,w,h);
+    // Subtle bokeh lights
+    ctxp.globalAlpha=0.35; ctxp.fillStyle='#27423e'; for(let i=0;i<24;i++){ const r=6+Math.random()*22; const x=Math.random()*w, y=Math.random()*h*0.55; ctxp.beginPath(); ctxp.arc(x,y,r,0,6.28); ctxp.fill(); } ctxp.globalAlpha=1;
     // Character simple render mirroring in-game palette
     const outfit = ccOutfit? ccOutfit.value : '#2a6aa8';
     const skin = ccSkin? ccSkin.value : '#f2d6c2';
@@ -1556,7 +1564,7 @@ Later patches (not in this edit):
     const wid = player.eq.weapon;
     if(!wid) return 'fist';
     const it = ITEM_DB[wid];
-    return (it && it.wep) ? (it.wep==='sword1h'?'sword':it.wep) : 'fist';
+    return (it && it.wep) ? (it.wep==='sword1h'||it.wep==='sword2h'?'sword':it.wep) : 'fist';
   }
 
   // Minimal sound engine (Sfx) — lightweight ROSE-like cues
@@ -1616,13 +1624,13 @@ Later patches (not in this edit):
   function primaryAttack(){
     const wep = getEquippedWeaponType();
     player.atkTimer = player.atkCd;
-    if(wep === 'sword'){ arcStrike(58, 1.0); vibrate(8); Sfx.play('slash'); return; }
+    if(wep === 'sword'){ arcStrike(62, 1.05); vibrate(8); Sfx.play('slash'); return; }
     if(wep === 'katar'){ const oldCd = player.atkCd; player.atkTimer = Math.max(0.12, oldCd * 0.55); arcStrike(42, 0.55, 2); vibrate(6); return; }
-    if(wep === 'launcher'){ const ang = getAimDir(); shoot(player.x, player.y, ang, player.atk*1.3+10, 260, 'player', 'rocket'); return; }
+    if(wep === 'launcher'){ const ang = getAimDir(); shoot(player.x, player.y, ang, player.atk*1.05+4, 240, 'player', 'rocket'); return; }
     if(wep === 'bow'){ const spread = mouse.down ? (Math.random()*0.02 - 0.01) : 0; const ang = getAimDir() + spread; shoot(player.x, player.y, ang, player.atk*0.95, player.projSpeed+90, 'player', 'arrow'); Sfx.play('bow'); return; }
-    if(wep === 'gun'){ const spread = (Math.random()*0.04 - 0.02); const ang = getAimDir() + spread; shoot(player.x, player.y, ang, player.atk*1.0, player.projSpeed+120, 'player', 'bullet'); Sfx.play('gun'); return; }
-    if(wep === 'staff'){ shoot(player.x, player.y, getAimDir(), player.atk*1.3+8, player.projSpeed+12, 'player', 'fire'); player.mp = clamp(player.mp-3, 0, player.mpMax); Sfx.play('cast'); return; }
-    if(wep === 'wand'){ const oldCd = player.atkCd; player.atkTimer = Math.max(0.14, oldCd * 0.8); shoot(player.x, player.y, getAimDir(), player.atk*0.9+5, player.projSpeed+24, 'player', 'magic'); Sfx.play('cast'); return; }
+    if(wep === 'gun'){ const spread = (Math.random()*0.04 - 0.02); const ang = getAimDir() + spread; shoot(player.x, player.y, ang, player.atk*0.9, player.projSpeed+110, 'player', 'bullet'); Sfx.play('gun'); return; }
+    if(wep === 'staff'){ shoot(player.x, player.y, getAimDir(), player.atk*1.15+6, player.projSpeed+10, 'player', 'fire'); player.mp = clamp(player.mp-4, 0, player.mpMax); Sfx.play('cast'); return; }
+    if(wep === 'wand'){ const oldCd = player.atkCd; player.atkTimer = Math.max(0.14, oldCd * 0.8); shoot(player.x, player.y, getAimDir(), player.atk*0.95+8, player.projSpeed+24, 'player', 'magic'); Sfx.play('cast'); return; }
     // fists if no weapon
     if(wep === 'fist'){ arcStrike(38, 0.45, 2); vibrate(4); return; }
     // fallback (should not happen)
