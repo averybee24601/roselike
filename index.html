@@ -1,4 +1,28 @@
 <!DOCTYPE html>
+<!--
+```PLAN.md
+Stack: Single-file HTML5 game. Primary renderer: Canvas2D with adapter shim; WebGL2 path detected with safe fallback. Saves: ap-save-v2 (progress), ap-meta (map). Input/UI unchanged.
+
+Patches timeline:
+- Patch 1 — Adapter, flags, safe fallback
+  - Add GRAPHICS flags/localStorage key `ap-graphics`.
+  - Introduce Renderer adapter with stage hooks and WebGL2 detection; fallback to Canvas path. Keep stage order.
+  - FPS safeguard hooks prepared for adaptive quality.
+
+- Patch 2 — Camera + depth sorting + NPC sprites
+  - Add procedural sprite atlas for NPCs (sign, merchant, trainer, storage, cart master, cart, harbor/ferry).
+  - Replace icon badges with animated sprites, same hitboxes; depth-sort by screen Y.
+  - Add TTS (Alt+T toggle, localStorage `ap-tts`) and Merchant greeting when opening shop.
+
+Later patches (not in this edit):
+- Patch 3 — Lighting baseline + blob shadows / shadowmap
+- Patch 4 — Butterflies (ambient boids)
+- Patch 5 — Zant maps + portals (no ferry to Canyon)
+- Patch 6 — Flaenae upgrade (snare + pollen)
+- Patch 7 — Polish & post-fx
+- Patch 8 — Minimap + UI sync
+```
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -32,6 +56,8 @@
   .xpbar{position:absolute; left:50%; transform:translateX(-50%); bottom:16px; width:min(860px, 96vw); background:var(--ui-bg); padding:10px 12px; border-radius:14px; pointer-events:none}
 
   .quest{position:absolute; right:12px; top:12px; background:var(--ui-bg); padding:10px 12px; border-radius:14px; width:min(420px, 96vw);} 
+  /* Minimap */
+  .minimap{position:absolute; left:12px; top:110px; width:180px; height:120px; background:var(--ui-bg); border-radius:10px; box-shadow:0 6px 20px rgba(0,0,0,.25); pointer-events:none;}
   .quest h3{margin:0 0 4px 0; font-size:14px; letter-spacing:.3px}
   .quest p{margin:2px 0; font-size:13px; color:#cde}
 
@@ -40,7 +66,7 @@
   /* Windows */
   .window{position:fixed; right:12px; bottom:70px; width:min(520px, 96vw); background:#0f1520; border:1px solid rgba(255,255,255,.12); border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.45); padding:12px; display:none; pointer-events:auto;}
   .window h2{margin:2px 0 8px; font-size:16px}
-  .window .list{display:grid; grid-template-columns: 1fr auto; gap:8px;}
+  .window .list{display:grid; grid-template-columns: 1fr auto; gap:8px; max-height: 46vh; overflow:auto;}
   .window .item{background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:8px}
   .window button{all:unset; background:linear-gradient(180deg, #1d2b3a, #13202c); border:1px solid rgba(255,255,255,.18); padding:8px 10px; border-radius:10px; cursor:pointer;}
   .window .close{position:absolute; right:10px; top:10px; opacity:.8}
@@ -94,6 +120,8 @@
       </div>
     </div>
 
+    <canvas id="minimap" class="minimap"></canvas>
+
     <div class="quest" aria-live="polite">
       <h3>Quest Tracker</h3>
       <p id="quest-line">Welcome to Adventure Plains. Press <b>E</b> near the signpost.</p>
@@ -113,7 +141,7 @@
         <span style="width:60px; font-size:12px">XP</span>
         <div class="meter"><i class="xp" id="xp"></i></div>
         <span class="chip">Next <span id="nextxp">50</span></span>
-        <span class="chip" style="margin-left:auto">Keys: <b>I</b> Inventory · <b>M</b> Shop · <b>J</b> Jobs · <b>Alt+A</b> Stats/Skills</span>
+        <span class="chip" style="margin-left:auto">Keys: <b>I</b> Inventory · <b>Alt+M</b> Shop · <b>Alt+L</b> Storage · <b>J</b> Jobs · <b>Alt+J</b> Job Guide · <b>Alt+A</b> Stats/Skills</span>
       </div>
     </div>
 
@@ -141,12 +169,13 @@
   <div class="window" id="invWin">
     <button class="close" id="invClose">✕</button>
     <h2>Inventory <span class="pill" id="invCount"></span></h2>
-    <div class="row" style="gap:6px; margin-bottom:6px; flex-wrap:wrap">
-      <div class="chip">Weapon: <span id="eqWeapon">—</span></div>
-      <div class="chip">Armor: <span id="eqArmor">—</span></div>
-      <div class="chip">Boots: <span id="eqBoots">—</span></div>
-      <div class="chip">Accessory: <span id="eqAcc">—</span></div>
-    </div>
+      <div class="row" style="gap:6px; margin-bottom:6px; flex-wrap:wrap">
+        <div class="chip">Weapon: <span id="eqWeapon">—</span></div>
+        <div class="chip">Armor: <span id="eqArmor">—</span></div>
+        <div class="chip">Boots: <span id="eqBoots">—</span></div>
+        <div class="chip">Accessory: <span id="eqAcc">—</span></div>
+        <div class="chip">Wings: <span id="eqWings">—</span></div>
+      </div>
     <div class="list" id="invList"></div>
   </div>
 
@@ -169,6 +198,24 @@
     <div class="list" id="statsList"></div>
   </div>
 
+  <div class="window" id="storageWin">
+    <button class="close" id="storageClose">✕</button>
+    <h2>Storage 🧳 — Personal Stash</h2>
+    <div class="row" style="gap:8px; flex-wrap:wrap; margin-bottom:8px">
+      <span class="pill">Stored <span id="storageCount">0</span></span>
+    </div>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
+      <div>
+        <h3 style="margin:4px 0 6px; font-size:14px">Inventory</h3>
+        <div class="list" id="storInvList"></div>
+      </div>
+      <div>
+        <h3 style="margin:4px 0 6px; font-size:14px">Storage</h3>
+        <div class="list" id="storBoxList"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 </div>
 
@@ -177,14 +224,19 @@
   const el = id=>document.getElementById(id);
   const canvas = el('game');
   const ctx = canvas.getContext('2d');
+  const minimapCanvas = el('minimap');
+  const mapCtx = minimapCanvas.getContext && el('minimap').getContext? el('minimap').getContext('2d'):null;
   const hpEl = el('hp'), mpEl = el('mp'), xpEl = el('xp');
   const lvEl = el('lv'), goldEl = el('gold'), nextxpEl = el('nextxp');
   const jobEl = el('job');
   const eqWeapon = el('eqWeapon'), eqArmor=el('eqArmor'), eqBoots=el('eqBoots'), eqAcc=el('eqAcc');
+  const eqWings = el('eqWings');
   const invWin = el('invWin'), shopWin=el('shopWin'), jobWin=el('jobWin');
   const invList = el('invList'), shopList=el('shopList'), jobList=el('jobList');
   const invClose = el('invClose'), shopClose=el('shopClose'), jobClose=el('jobClose');
   const statsWin = el('statsWin'); const statsList = el('statsList'); const statsClose = el('statsClose');
+  const storageWin = el('storageWin'); const storInvList = el('storInvList'); const storBoxList = el('storBoxList'); const storageClose = el('storageClose'); const storageCount = el('storageCount');
+  let jobGuideWin = null;
   const invCount=el('invCount');
   const shopGold=el('shopGold');
   const hint=el('hint');
@@ -203,7 +255,69 @@
   const H = ()=>Math.floor(innerHeight * DPR);
   let vw=W(), vh=H();
   canvas.width = vw; canvas.height = vh;
-  addEventListener('resize', ()=>{ vw=W(); vh=H(); canvas.width=vw; canvas.height=vh; });
+  if(minimapCanvas){ minimapCanvas.width=180; minimapCanvas.height=120; }
+  addEventListener('resize', ()=>{ vw=W(); vh=H(); canvas.width=vw; canvas.height=vh; if(Renderer && Renderer.gl){ try{ Renderer.gl.viewport(0,0,vw,vh);}catch(e){} } });
+
+  // ==== SECTION: FEATURE FLAGS / GRAPHICS ====
+  const GRAPHICS_DEFAULTS = {
+    renderer: "webgl",          // "webgl" | "canvas"
+    lighting: "basic",          // "off" | "basic" | "normalMapped"
+    shadows: "blob",            // "off" | "blob" | "shadowmap"
+    post: { bloom:false, vignette:true, aberration:false },
+    mobilePreset: "med",
+    caps: { butterflies: 18, flaenae: 8 }
+  };
+  const GRAPHICS = Object.assign({}, GRAPHICS_DEFAULTS, JSON.parse(localStorage.getItem('ap-graphics')||'{}'));
+  function saveGraphics(){ try{ localStorage.setItem('ap-graphics', JSON.stringify(GRAPHICS)); }catch(e){} }
+
+  // Simple FPS monitor and adaptive hooks (no heavy changes yet)
+  const Perf = { smoothed:60, lowTimer:0 };
+  function updatePerf(dt){ const fps = 1/Math.max(0.001,dt); Perf.smoothed = Perf.smoothed*0.9 + fps*0.1; if(Perf.smoothed<45){ Perf.lowTimer+=dt; } else { Perf.lowTimer=Math.max(0, Perf.lowTimer-dt*2); } if(Perf.lowTimer>3){ // progressive fallback
+      if(GRAPHICS.post && GRAPHICS.post.bloom){ GRAPHICS.post.bloom=false; saveGraphics(); notify('Perf: disabling bloom'); Perf.lowTimer=0; return; }
+      if(GRAPHICS.shadows==='shadowmap'){ GRAPHICS.shadows='blob'; saveGraphics(); notify('Perf: fallback to blob shadows'); Perf.lowTimer=0; return; }
+      if(GRAPHICS.lighting==='normalMapped'){ GRAPHICS.lighting='basic'; saveGraphics(); notify('Perf: reducing lighting'); Perf.lowTimer=0; return; }
+    } }
+
+  // ==== RENDERER ADAPTER ====
+  const Renderer = (function(){
+    let gl=null; let backend='canvas'; let warned=false;
+    function init(canvasEl){
+      if(GRAPHICS.renderer==='webgl'){
+        try{
+          gl = canvasEl.getContext('webgl2', {antialias:false, premultipliedAlpha:true});
+        }catch(e){ gl=null; }
+        if(!gl){ backend='canvas'; if(!warned){ notify('WebGL not available — using Canvas'); warned=true; } GRAPHICS.renderer='canvas'; }
+        else { backend='webgl'; console.log('[Renderer] WebGL2 ready (stubbed draw path uses Canvas until Patch 3)'); }
+      } else backend='canvas';
+      return backend;
+    }
+    function beginFrame(){ ctx.clearRect(0,0,vw,vh); }
+    const draw = {
+      drawTiles(){ drawTiles(); },
+      drawDecor(){ drawDecor(); },
+      drawNPCs(){ drawNPCs(); },
+      drawMobs(){ drawMobsSorted(); },
+      drawProjs(){ drawProjectilesStage(); },
+      drawPlayer(){ drawPlayer(); },
+      drawFX(){ drawFXStage(); },
+      drawOverlay(){ drawTransitionOverlay(); }
+    };
+    function endFrame(){ /* placeholder for postfx */ }
+    return { init, beginFrame, draw, endFrame, get backend(){return backend;}, get gl(){return gl;} };
+  })();
+
+  // Initialize renderer (after canvas sized)
+  Renderer.init(canvas);
+
+  // ==== SECTION: TTS OPTION ====
+  const TTS_KEY='ap-tts';
+  let TTS_ENABLED = (()=>{ try{ return localStorage.getItem(TTS_KEY)==='1'; }catch(e){ return false; } })();
+  function saveTTS(){ try{ localStorage.setItem(TTS_KEY, TTS_ENABLED?'1':'0'); }catch(e){} }
+  function ttsSay(text){
+    if(!TTS_ENABLED) return;
+    const synth = window.speechSynthesis; if(!synth) return;
+    try{ const u = new SpeechSynthesisUtterance(text); u.rate=1.0; u.pitch=1.0; u.volume=1.0; synth.cancel(); synth.speak(u); }catch(e){}
+  }
 
   const rand = (a,b)=>a+Math.random()*(b-a);
   const clamp=(v,a,b)=>Math.max(a, Math.min(b,v));
@@ -220,6 +334,8 @@
   let seed=1337; const r=()=> (seed = (seed*16807)%2147483647)/2147483647;
 
   const tiles = new Array(MAP_W*MAP_H).fill(0); // 0 grass, 1 dirt, 2 water
+  // Town guard zones: populated per-map; enemies may not enter
+  const townZones = [];
   for(let y=0;y<MAP_H;y++){
     for(let x=0;x<MAP_W;x++){
       let idx=y*MAP_W+x;
@@ -244,6 +360,8 @@
   const fx=[]; // transient visuals
   const drops=[]; // ground loot {x,y,t:time, gold?, item?}
   const turrets=[]; // dealer skill
+  const portals=[]; // map portals
+  let storageBox=[]; // persistent storage
 
   // Items & Shop (ensure specified weapon stats)
   const ITEM_DB={
@@ -260,30 +378,60 @@
     royal_core:{name:'Royal Core', type:'gear', slot:'accessory', atk:8, hpMax:30, price:0},
     power_candy:{name:'Power Candy', type:'consumable', atk:4, dur:45, price:25},
     junon_scroll:{name:'Return Scroll: Junon Polis', type:'consumable', teleport:'junon', spawnTag:'gate', price:0},
-    cart_pass:{name:'Cart License', type:'vehicle', vehicle:'cart', price:0}
+    cart_pass:{name:'Cart License', type:'vehicle', vehicle:'cart', price:0},
+    // Mid-tier gear for Junon
+    bronze_sword:{name:'Bronze Sword', type:'gear', slot:'weapon', wep:'sword', atk:14, price:160},
+    iron_sword:{name:'Iron Sword', type:'gear', slot:'weapon', wep:'sword', atk:22, price:300},
+    oak_bow:{name:'Oak Bow', type:'gear', slot:'weapon', wep:'bow', atk:12, price:180},
+    composite_bow:{name:'Composite Bow', type:'gear', slot:'weapon', wep:'bow', atk:20, price:280},
+    fine_katar:{name:'Fine Katar', type:'gear', slot:'weapon', wep:'katar', atk:14, aspd:0.9, price:220},
+    battle_staff:{name:'Battle Staff', type:'gear', slot:'weapon', wep:'staff', atk:20, mpMax:20, price:260},
+    mystic_wand:{name:'Mystic Wand', type:'gear', slot:'weapon', wep:'wand', atk:18, price:260},
+    steel_armor:{name:'Steel Armor', type:'gear', slot:'armor', hpMax:80, price:240},
+    swift_boots:{name:'Swift Boots', type:'gear', slot:'boots', speed:80, price:220},
+    rocket_launcher:{name:'Rocket Launcher', type:'gear', slot:'weapon', wep:'launcher', atk:28, aspd:1.2, price:420},
+    // Wings gear
+    butterfly_wings:{name:'Butterfly Wings', type:'gear', slot:'wings', speed:120, style:'butterfly', price:600},
+    angel_wings:{name:'Angel Wings', type:'gear', slot:'wings', speed:100, hpMax:40, style:'angel', price:700},
+    // Extra travel scrolls
+    zant_scroll:{name:'Return Scroll: Zant', type:'consumable', teleport:'zant', spawnTag:'plaza', price:0},
+    elver_scroll:{name:'Return Scroll: El Verloon Desert', type:'consumable', teleport:'elverloon', spawnTag:'oasis', price:0}
   };
-  const SHOP_STOCK=['potion_hp','potion_mp','wood_sword','wood_bow','wood_katar','wood_staff','wood_wand','leather_armor','runner_shoes','feather_charm','power_candy'];
+  const SHOP_STOCK_BASE=['potion_hp','potion_mp','wood_sword','wood_bow','wood_katar','wood_staff','wood_wand','leather_armor','runner_shoes','feather_charm','power_candy','rocket_launcher','butterfly_wings'];
+  const SHOP_STOCK_MID=['potion_hp','potion_mp','bronze_sword','oak_bow','fine_katar','battle_staff','mystic_wand','steel_armor','swift_boots','power_candy','butterfly_wings','angel_wings','zant_scroll'];
+  const SHOP_STOCK_HIGH=['potion_hp','potion_mp','iron_sword','composite_bow','fine_katar','battle_staff','mystic_wand','steel_armor','swift_boots','power_candy','angel_wings','elver_scroll'];
+  function getShopStock(){
+    if(mapName==='junon'){
+      return player.level>=10? SHOP_STOCK_HIGH : SHOP_STOCK_MID;
+    }
+    return SHOP_STOCK_BASE;
+  }
+  function getAllShopStock(){
+    const set = new Set([...SHOP_STOCK_BASE, ...SHOP_STOCK_MID, ...SHOP_STOCK_HIGH]);
+    return Array.from(set);
+  }
 
   // Player, Inventory & Equipment
   function makePlayer(){
     return {
-      kind:'player', x:startPos.x, y:startPos.y, r:18, baseSpeed:190, speed:190, dir:0,
+      kind:'player', x:startPos.x, y:startPos.y, r:18, baseSpeed:150, speed:150, dir:0,
       hp:100, hpMax:100, mp:60, mpMax:60, level:1, xp:0, gold:0,
       atk:12, baseAtk:12, atkCd:0.24, atkTimer:0, projSpeed:430, alive:true,
-      inv:[], invCap:22, eq:{weapon:null, armor:null, boots:null, accessory:null},
+      inv:[], invCap:22, eq:{weapon:null, armor:null, boots:null, accessory:null, wings:null},
       buffs:[], hasCartPass:false, mounted:false,
-      job:'Visitor', skills:[null,null,null,null], skillCd:[0,0,0,0], flags:{cartUnlocked:false}
+      job:'Visitor', skills:[null,null,null,null], skillCd:[0,0,0,0], flags:{cartUnlocked:false},
+      statPoints: 0
     };
   }
   let player = makePlayer();
 
   function recalcStats(){
     let atk=player.baseAtk, hpMax=100, speed=player.baseSpeed, atkCd=0.24, mpMax=player.mpMax;
-    for(const k of ['weapon','armor','boots','accessory']){
+    for(const k of ['weapon','armor','boots','accessory','wings']){
       const itemId = player.eq[k]; if(!itemId) continue; const it=ITEM_DB[itemId];
       if(it.atk) atk+=it.atk; if(it.hpMax) hpMax+=it.hpMax; if(it.speed) speed+=it.speed; if(it.aspd) atkCd*=it.aspd; if(it.mpMax) mpMax=(mpMax||player.mpMax)+it.mpMax;
     }
-    for(const b of player.buffs){ if(b.atk) atk+=b.atk; if(b.speed) speed+=b.speed; if(b.hpMax) hpMax+=b.hpMax; }
+    for(const b of player.buffs){ if(b.atk) atk+=b.atk; if(b.speed) speed+=b.speed; if(b.hpMax) hpMax+=b.hpMax; if(b.aspd) atkCd*=b.aspd; }
     if(player.mounted){ speed += 120; }
     player.atk = atk; player.hpMax = hpMax; player.speed = speed; player.atkCd = clamp(atkCd, 0.12, 0.5); player.mpMax = mpMax||player.mpMax;
     if(player.hp>player.hpMax) player.hp=player.hpMax;
@@ -340,6 +488,7 @@
     eqArmor.textContent  = player.eq.armor? ITEM_DB[player.eq.armor].name: '—';
     eqBoots.textContent  = player.eq.boots? ITEM_DB[player.eq.boots].name: '—';
     eqAcc.textContent    = player.eq.accessory? ITEM_DB[player.eq.accessory].name: '—';
+    if(eqWings) eqWings.textContent = player.eq.wings? ITEM_DB[player.eq.wings].name : '—';
     invList.innerHTML='';
     player.inv.forEach((entry,i)=>{
       const it=ITEM_DB[entry.id];
@@ -351,20 +500,78 @@
 
   function openInventory(){ invWin.style.display='block'; renderInventory(); }
   function closeInventory(){ invWin.style.display='none'; }
-  function openShop(){ shopGold.textContent = player.gold|0; shopList.innerHTML=''; SHOP_STOCK.forEach(id=>{
+  function openShop(all=false){ shopGold.textContent = player.gold|0; shopList.innerHTML=''; (all? getAllShopStock() : getShopStock()).forEach(id=>{
       const it=ITEM_DB[id]; const div=document.createElement('div'); div.className='item';
       div.innerHTML=`<b>${it.name}</b> <span class="pill">${it.type}</span> <span class="pill">${it.price}✦</span><div style="font-size:12px; opacity:.85; margin-top:4px">${statsText(it)}</div>`;
       const actions=document.createElement('div'); const btn=document.createElement('button'); btn.textContent='Buy'; btn.onclick=()=>{ if(player.gold>=it.price){ player.gold-=it.price; addToInv(id,1); shopGold.textContent=player.gold|0; goldEl.textContent=player.gold|0; notify('Purchased '+it.name); } else notify('Not enough gold'); };
       actions.appendChild(btn); shopList.appendChild(div); shopList.appendChild(actions);
-    }); shopWin.style.display='block'; }
+    }); shopWin.style.display='block'; shopList.scrollTop=0; ttsSay('Hello fellow rosarian, i have some items that may help ease your journey'); }
   function closeShop(){ shopWin.style.display='none'; }
-  invClose.onclick=closeInventory; shopClose.onclick=closeShop; jobClose.onclick=()=>jobWin.style.display='none'; statsClose.onclick=()=>statsWin.style.display='none';
+  invClose.onclick=closeInventory; shopClose.onclick=closeShop; jobClose.onclick=()=>jobWin.style.display='none'; statsClose.onclick=()=>statsWin.style.display='none'; storageClose.onclick=()=>storageWin.style.display='none';
+
+  // Storage (simple stash)
+  const STORAGE_KEY='ap-storage-v1';
+  function saveStorage(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(storageBox)); }catch(e){} }
+  function loadStorage(){ try{ storageBox = JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); if(!Array.isArray(storageBox)) storageBox=[]; }catch(e){ storageBox=[]; } }
+  function renderStorage(){
+    storageCount.textContent = (storageBox.length||0);
+    // Inventory side: items you can store
+    storInvList.innerHTML='';
+    player.inv.forEach((entry,i)=>{
+      const it=ITEM_DB[entry.id]; if(!it) return;
+      const div=document.createElement('div'); div.className='item'; div.innerHTML=`<b>${it.name}</b> <span class="pill">${it.type}</span> ${entry.stack? `<span class="pill">x${entry.stack}</span>`:''}`;
+      const actions=document.createElement('div'); const btn=document.createElement('button'); btn.textContent='Store'; btn.onclick=()=>{
+        // Split stacks when possible
+        if(entry.stack && entry.stack>1){ entry.stack--; storageBox.push({id:entry.id, stack:1}); }
+        else { storageBox.push(entry); player.inv.splice(i,1); }
+        save(); saveStorage(); renderInventory(); renderStorage(); notify('Stored item'); };
+      actions.appendChild(btn); storInvList.appendChild(div); storInvList.appendChild(actions);
+    });
+    // Storage side: items to withdraw
+    storBoxList.innerHTML='';
+    storageBox.forEach((entry,i)=>{
+      const it=ITEM_DB[entry.id]; if(!it) return;
+      const div=document.createElement('div'); div.className='item'; div.innerHTML=`<b>${it.name}</b> <span class="pill">${it.type}</span> ${entry.stack? `<span class="pill">x${entry.stack}</span>`:''}`;
+      const actions=document.createElement('div'); const btn=document.createElement('button'); btn.textContent='Withdraw'; btn.onclick=()=>{
+        if(it.type==='consumable' && entry.stack && entry.stack>1){ entry.stack--; addToInv(entry.id,1); }
+        else { addToInv(entry.id, entry.stack||1); storageBox.splice(i,1); }
+        saveStorage(); renderInventory(); renderStorage(); notify('Withdrew item'); };
+      actions.appendChild(btn); storBoxList.appendChild(div); storBoxList.appendChild(actions);
+    });
+  }
+  function openStorage(){ storageWin.style.display='block'; renderStorage(); }
+
+  function ensureJobGuideEl(){
+    if(jobGuideWin) return jobGuideWin;
+    jobGuideWin = document.createElement('div');
+    jobGuideWin.className='window';
+    jobGuideWin.style.display='none';
+    jobGuideWin.innerHTML = `
+      <button class="close" id="jobGuideClose">✕</button>
+      <h2>Jobs Guide</h2>
+      <div class="list">
+        <div class="item"><b>Choose your path at Lv 10</b><div style="opacity:.8; font-size:12px; margin-top:4px">Hawker · Dealer · Soldier · Muse. Visit the Trainer (★) to start your job quest.</div></div>
+        <div class="item">Press <b>E</b> near the Trainer to talk. Follow the on-screen arrows to find them.</div>
+      </div>`;
+    document.getElementById('game-wrap').appendChild(jobGuideWin);
+    jobGuideWin.querySelector('#jobGuideClose').onclick = ()=>{ jobGuideWin.style.display='none'; jobArrow.active=false; };
+    return jobGuideWin;
+  }
+
+  let jobArrow = {active:false};
+  function openJobGuide(){ ensureJobGuideEl(); jobGuideWin.style.display='block'; jobArrow.active=true; }
 
   function openSkills(){
-    const s = player.stats || (player.stats={str:0,dex:0,int:0});
+    const s = player.stats || (player.stats={str:0,dex:0,int:0,sen:0,con:0});
     statsList.innerHTML = '';
-    const mkRow=(label,key)=>{ const wrap=document.createElement('div'); wrap.className='item'; wrap.innerHTML=`<b>${label}</b> <span class="pill">${s[key]}</span>`; const actions=document.createElement('div'); const plus=document.createElement('button'); plus.textContent='+1'; plus.onclick=()=>{ s[key]++; recalcStats(); save(); openSkills(); }; actions.appendChild(plus); statsList.appendChild(wrap); statsList.appendChild(actions); };
-    mkRow('STR','str'); mkRow('DEX','dex'); mkRow('INT','int');
+    const pts = player.statPoints|0;
+    const header=document.createElement('div'); header.className='item'; header.innerHTML = `<b>Points Available</b> <span class="pill">${pts}</span>`; statsList.appendChild(header); statsList.appendChild(document.createElement('div'));
+    const mkRow=(label,key,desc)=>{ const wrap=document.createElement('div'); wrap.className='item'; wrap.innerHTML=`<b>${label}</b> <span class="pill">${s[key]}</span> <span class="pill" style="opacity:.8">${desc}</span>`; const actions=document.createElement('div'); const plus=document.createElement('button'); plus.textContent='+1'; plus.disabled = (player.statPoints|0) <= 0; plus.onclick=()=>{ if(player.statPoints>0){ s[key]++; player.statPoints--; recalcStats(); save(); openSkills(); } }; actions.appendChild(plus); statsList.appendChild(wrap); statsList.appendChild(actions); };
+    mkRow('STR','str','Increases physical attack and max HP with some weapons.');
+    mkRow('DEX','dex','Increases movement speed and boosts bows/katars.');
+    mkRow('INT','int','Increases magic damage and MP-based skills.');
+    mkRow('SEN','sen','Increases critical chance and item find.');
+    mkRow('CON','con','Increases accuracy; reduces chance to miss attacks.');
     statsWin.style.display='block';
   }
 
@@ -376,15 +583,18 @@
     ],
     Soldier:[
       {id:'slash', name:'Power Slash', icon:'⚔️', cd:5, mp:12, use:()=>arcStrike(70,1.4)},
-      {id:'whirl', name:'Whirlwind', icon:'🌀', cd:10, mp:16, use:()=>spinAoE(90,0.7)}
+      {id:'whirl', name:'Whirlwind', icon:'🌀', cd:10, mp:16, use:()=>spinAoE(90,0.7)},
+      {id:'berserk', name:'Berserk', icon:'🔥', cd:20, mp:0, use:()=>{ player.buffs.push({aspd:0.75, atk:6, t:10}); notify('Berserk!'); }}
     ],
     Hawker:[
       {id:'dbl', name:'Double Shot', icon:'🎯', cd:4, mp:10, use:()=>multiShot(2,10)},
-      {id:'flurry', name:'Flurry', icon:'🥷', cd:7, mp:12, use:()=>arcStrike(60,2.0,3)}
+      {id:'flurry', name:'Flurry', icon:'🥷', cd:7, mp:12, use:()=>arcStrike(60,2.0,3)},
+      {id:'haste', name:'Haste', icon:'💨', cd:22, mp:0, use:()=>{ player.buffs.push({speed:120, t:10}); notify('Haste up!'); }}
     ],
     Muse:[
       {id:'bolt', name:'Mana Bolt', icon:'✨', cd:2.6, mp:10, use:()=>magicBolt(1.2)},
-      {id:'heal', name:'Heal', icon:'➕', cd:6, mp:14, use:()=>{ player.hp=clamp(player.hp+50,0,player.hpMax); notify('Healed'); }}
+      {id:'heal', name:'Heal', icon:'➕', cd:6, mp:14, use:()=>{ player.hp=clamp(player.hp+50,0,player.hpMax); notify('Healed'); }},
+      {id:'haste', name:'Haste', icon:'💨', cd:20, mp:10, use:()=>{ player.buffs.push({speed:140, t:10}); notify('Haste up!'); }}
     ],
     Dealer:[
       {id:'nade', name:'Grenade', icon:'💣', cd:6, mp:10, use:()=>grenade()},
@@ -405,28 +615,50 @@
     player.mp-=s.mp; s.use(); player.skillCd[slot]=s.cd; scds[slot].style.display='grid';
   }
 
-  // Weapon-synergy scaling (STR/DEX/INT)
+  // Stat scaling (STR/DEX/INT/SEN/CON)
   (function(){
     const _recalc = recalcStats;
     recalcStats = function(){
       _recalc();
-      const s = player.stats || (player.stats = {str:0,dex:0,int:0});
-      let atk = player.atk, hpMax = player.hpMax;
-      const wepType = (player.eq && player.eq.weapon && ITEM_DB[player.eq.weapon]?.wep) || 'fist';
-      if(wepType==='bow' || wepType==='katar'){ atk += s.dex * 0.8; player.speed += s.dex * 2; }
-      if(wepType==='sword'){ atk += s.str * 0.8; hpMax += Math.floor(s.str * 3); }
-      if(wepType==='staff' || wepType==='wand'){ atk += s.int * 0.9; }
-      player.atk = Math.round(atk); player.hpMax = hpMax;
+      const s = player.stats || (player.stats = {str:0,dex:0,int:0,sen:0,con:0});
+      // STR: baseline physical power
+      player.atk = Math.round(player.atk + (s.str||0) * 1.0);
+      // DEX: movement speed bonus (stronger scaling)
+      player.speed += (s.dex||0) * 3.5;
+      // INT: applied in calcDamage for magic damage only
+      // SEN: applied in calcDamage as crit chance
+      // CON: affects accuracy via rollHitAgainst()
       if(player.hp>player.hpMax) player.hp=player.hpMax;
     };
   })();
+
+  // Combat helpers: damage calc and floating numbers
+  function calcDamage(base, kind){
+    const s = player.stats || (player.stats={str:0,dex:0,int:0,sen:0,con:0});
+    let dmg = base;
+    if(kind==='magic') dmg += (s.int||0) * 1.2;
+    let crit = false;
+    const chance = Math.min(0.5, 0.05 + 0.01 * (s.sen||0));
+    if(Math.random() < chance){ crit = true; dmg *= 1.75; }
+    return { dmg: Math.max(1, Math.round(dmg)), crit };
+  }
+  function rollHitAgainst(target){
+    const s = player.stats || (player.stats={str:0,dex:0,int:0,sen:0,con:0});
+    // Base 78% chance to hit, +1.5% per CON, small penalty for quick enemies
+    const base = 0.78 + 0.015 * (s.con||0);
+    const evasion = clamp(((target.speed||80) - 80) / 400, -0.05, 0.15); // -5%..+15%
+    const chance = clamp(base - evasion, 0.05, 0.98);
+    return Math.random() < chance;
+  }
+  function showMiss(x,y){ fx.push({t:0.8, kind:'miss', x, y}); }
+  function showDamage(x,y,amount,isCrit){ fx.push({t:1.1, kind:'dmg', x, y, val:amount, crit:isCrit}); }
 
   // Skill helpers
   function dash(len){ const a=player.dir; player.x+=Math.cos(a)*len; player.y+=Math.sin(a)*len; fx.push({t:0.3, kind:'dash', x:player.x, y:player.y}); }
   function arcStrike(radius, mult=1.0, swings=1){
     const base = player.atk*mult; const a0=player.dir; for(let k=0;k<swings;k++){
       setTimeout(()=>{
-        for(const m of ents){ if(!m.alive) continue; const a=Math.atan2(m.y-player.y,m.x-player.x); let da=Math.atan2(Math.sin(a-a0),Math.cos(a-a0)); if(Math.abs(da)<0.9 && dist(player.x,player.y,m.x,m.y)<radius){ m.hp-=base; m.hurt=0.12; if(m.hp<=0){ m.alive=false; onMobKilled(m);} }
+        for(const m of ents){ if(!m.alive) continue; const a=Math.atan2(m.y-player.y,m.x-player.x); let da=Math.atan2(Math.sin(a-a0),Math.cos(a-a0)); if(Math.abs(da)<0.9 && dist(player.x,player.y,m.x,m.y)<radius){ if(rollHitAgainst(m)){ const out=calcDamage(base,'physical'); m.hp-=out.dmg; showDamage(m.x,m.y,out.dmg,out.crit); m.hurt=0.12; if(m.hp<=0){ m.alive=false; onMobKilled(m);} } else { showMiss(m.x,m.y); } }
         }
         fx.push({t:0.18, kind:'arc', x:player.x, y:player.y, a:a0, r:radius});
       }, k*90);
@@ -437,15 +669,24 @@
   function multiShot(n, spread){ for(let i=0;i<n;i++){ const a=player.dir + ((i-(n-1)/2)*spread*Math.PI/180); shoot(player.x,player.y,a,player.atk*0.9, player.projSpeed+40,'player'); } }
   function magicBolt(mult){ shoot(player.x,player.y,player.dir, player.atk*mult+6, player.projSpeed+10,'player','magic'); }
   function grenade(){ const a=player.dir; const speed=280; projs.push({x:player.x,y:player.y,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed, dmg:0, ttl:0.7, owner:'player', kind:'lob', onExpire:(px,py)=>{ // explode
-      for(const m of ents){ if(!m.alive) continue; if(dist(px,py,m.x,m.y)<90){ m.hp-=player.atk*1.2; m.hurt=0.2; if(m.hp<=0){ m.alive=false; onMobKilled(m);} }
+      for(const m of ents){ if(!m.alive) continue; if(dist(px,py,m.x,m.y)<90){ const out=calcDamage(player.atk*1.2,'physical'); m.hp-=out.dmg; showDamage(m.x,m.y,out.dmg,out.crit); m.hurt=0.2; if(m.hp<=0){ m.alive=false; onMobKilled(m);} }
       }
       fx.push({t:0.35, kind:'boom', x:px,y:py});
     }});
   }
   function deployTurret(){ const a=player.dir; const x=player.x+Math.cos(a)*40, y=player.y+Math.sin(a)*40; const t={x,y,t:8}; turrets.push(t); notify('Turret deployed'); }
 
+  // ==== SECTION: MOB TYPE NORMALIZER (Flaenae alias) ====
+  function normalizeType(t){
+    if(!t) return t;
+    const k = String(t).toLowerCase();
+    if(k==='flaenae' || k==='flaenae '|| k==='flaena' ) return 'flanae';
+    return t;
+  }
+
   // Enemies
   function spawnMob(type,x,y){
+    type = normalizeType(type);
     const base = {kind:'mob', type, x, y, r:18, speed:90, hp:40, hpMax:40, atk:8, alive:true, hurt:0, aggro:0};
     if(type==='jelly'){ Object.assign(base,{r:19,speed:90,hp:35,hpMax:35,atk:6}); }
     if(type==='pumpkin'){ Object.assign(base,{r:19,speed:70,hp:70,hpMax:70,atk:10}); }
@@ -454,6 +695,8 @@
     if(type==='moldy'){ Object.assign(base,{r:20,speed:70,hp:120,hpMax:120,atk:16}); }
     if(type==='moldy_elite'){ Object.assign(base,{r:22,speed:80,hp:220,hpMax:220,atk:24}); }
     if(type==='rockgolem'){ Object.assign(base,{r:26,speed:60,hp:420,hpMax:420,atk:30, golem:true}); }
+    if(type==='choropy'){ Object.assign(base,{r:18,speed:130,hp:60,hpMax:60,atk:10}); }
+    if(type==='woopie'){ Object.assign(base,{r:20,speed:100,hp:80,hpMax:80,atk:12}); }
     ents.push(base); return base;
   }
 
@@ -470,7 +713,8 @@
   const sign = {kind:'npc', npc:'sign', x:startPos.x+TILE*2.5, y:startPos.y- TILE*1.2, r:18};
   const merchant = {kind:'npc', npc:'merchant', x:startPos.x+TILE*5.5, y:startPos.y- TILE*0.3, r:22};
   const trainer = {kind:'npc', npc:'trainer', x:startPos.x+TILE*3.8, y:startPos.y+ TILE*0.4, r:22};
-    const cartMaster = {kind:'npc', npc:'cartmaster', x:startPos.x+TILE*0.8, y:startPos.y+ TILE*1.8, r:24};
+  const cartMaster = {kind:'npc', npc:'cartmaster', x:startPos.x+TILE*0.8, y:startPos.y+ TILE*1.8, r:24};
+  const storageNPC = {kind:'npc', npc:'storage', x:startPos.x+TILE*6.8, y:startPos.y+ TILE*1.0, r:22};
     // Boat NPC in plains is static object; ferryJ is placed in genJunon
 
   // Quests
@@ -493,6 +737,10 @@
   const keys={};
   addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); keys[k]=true; if(e.key===' '){e.preventDefault();}
     if(e.altKey && ((e.key==='S'||k==='s') || (e.key==='A'||k==='a'))){ if(typeof openSkills==='function') openSkills(); }
+    if(e.altKey && (e.key==='M' || k==='m')){ if(shopWin.style.display==='block'){ shopWin.style.display='none'; } else { openShop(true); } }
+    if(e.altKey && (e.key==='L' || k==='l')){ if(storageWin.style.display==='block'){ storageWin.style.display='none'; } else { openStorage(); } }
+    if(e.altKey && (e.key==='J' || k==='j')){ openJobGuide(); }
+    if(e.altKey && (e.key==='T' || k==='t')){ TTS_ENABLED=!TTS_ENABLED; saveTTS(); notify('TTS '+(TTS_ENABLED?'ON':'OFF')); }
     if(k==='i'){ openInventory(); }
     if(k==='m'){ if(nearest(merchant) < TILE*1.8) openShop(); else notify('Find the Merchant (🛒)'); }
     if(k==='j'){ if(nearest(trainer) < TILE*1.8) openJobs(); else notify('Find the Trainer (★)'); }
@@ -526,7 +774,10 @@
   function vibrate(ms){ if(navigator.vibrate) navigator.vibrate(ms); }
 
   function startNew(){
-    player = makePlayer(); recalcStats(); setSkillsForJob(player.job);
+    player = makePlayer();
+    player.stats = {str:0,dex:0,int:0,sen:0};
+    player.statPoints = 5;
+    recalcStats(); setSkillsForJob(player.job);
     qIndex=0; quests.forEach(q=>{q.prog=0; q.done=false;}); cartQuest.active=false; cartQuest.paid=false; cartQuest.pumpkins=0;
     ents.length=0; projs.length=0; drops.length=0; turrets.length=0; fx.length=0; summonedCart=null;
     addToInv('wood_sword',1);
@@ -547,7 +798,7 @@
 
   function save(){
     saveMeta();
-    const data={p:{x:player.x,y:player.y,hp:player.hp,mp:player.mp,level:player.level,xp:player.xp,gold:player.gold,baseAtk:player.baseAtk,eq:player.eq,inv:player.inv,mounted:player.mounted,job:player.job,flags:player.flags}, q:quests.map(q=>({id:q.id,prog:q.prog,done:q.done})), idx:qIndex, cartQuest};
+    const data={p:{x:player.x,y:player.y,hp:player.hp,mp:player.mp,level:player.level,xp:player.xp,gold:player.gold,baseAtk:player.baseAtk,eq:player.eq,inv:player.inv,mounted:player.mounted,job:player.job,flags:player.flags,stats:player.stats,statPoints:player.statPoints}, q:quests.map(q=>({id:q.id,prog:q.prog,done:q.done})), idx:qIndex, cartQuest};
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   }
 
@@ -560,6 +811,8 @@
       const d=JSON.parse(s);
       player = Object.assign(makePlayer(), d.p||{});
       if(!player.flags) player.flags={};
+      if(!player.stats) player.stats = {str:0,dex:0,int:0,sen:0};
+      if(player.statPoints==null) player.statPoints = 0;
       quests.forEach(q=>{ const st=(d.q||[]).find(x=>x.id===q.id); if(st){ q.prog=st.prog||0; q.done=!!st.done; } else { q.prog=0; q.done=false; } });
       qIndex=d.idx||0; if(d.cartQuest){ Object.assign(cartQuest, d.cartQuest); }
       recalcStats(); setSkillsForJob(player.job||'Visitor');
@@ -577,6 +830,32 @@
   function blocked(x,y){ return tileAt(x,y)===2; } // water blocks
   function nearest(obj){ return dist(player.x,player.y,obj.x,obj.y); }
 
+  // Town guard helpers
+  function isInTown(x,y){
+    for(const z of townZones){
+      if(z.type==='circle'){
+        if(dist(x,y,z.x,z.y) <= z.r) return true;
+      } else if(z.type==='rect'){
+        if(x>=z.x && x<=z.x+z.w && y>=z.y && y<=z.y+z.h) return true;
+      }
+    }
+    return false;
+  }
+  function pushOutOfTown(m){
+    for(const z of townZones){
+      if(z.type==='circle'){
+        const dx = m.x - z.x, dy = m.y - z.y; const d = Math.hypot(dx,dy) || 1;
+        if(d <= z.r){ const nx = dx/d, ny = dy/d; m.x = z.x + nx*(z.r+16); m.y = z.y + ny*(z.r+16); }
+      } else if(z.type==='rect'){
+        if(m.x>=z.x && m.x<=z.x+z.w && m.y>=z.y && m.y<=z.y+z.h){
+          const left = m.x - z.x, right = (z.x+z.w) - m.x, top = m.y - z.y, bottom = (z.y+z.h) - m.y;
+          const min = Math.min(left,right,top,bottom);
+          if(min===left) m.x = z.x - 16; else if(min===right) m.x = z.x+z.w + 16; else if(min===top) m.y = z.y - 16; else m.y = z.y+z.h + 16;
+        }
+      }
+    }
+  }
+
   // ==== PATCH 5: Multi-map + ferry travel ====
   let mapName = 'plains';
   let transition = {a:0,to:null};
@@ -587,7 +866,9 @@
 
   const MAPS = {
     plains: { label:'Adventure Plains', gen: genPlains,  spawn:{main:{x: TILE*4, y: TILE*6}} },
-    junon:  { label:'Junon Polis',      gen: genJunon,   spawn:{dock:{x: TILE*44, y: TILE*58}, gate:{x:TILE*20, y:TILE*28}} }
+    junon:  { label:'Junon Polis',      gen: genJunon,   spawn:{dock:{x: TILE*44, y: TILE*58}, gate:{x:TILE*20, y:TILE*28}} },
+    zant:   { label:'Zant',             gen: genZant,    spawn:{plaza:{x:TILE*24, y:TILE*18}, gate:{x:TILE*10, y:TILE*34}} },
+    elverloon:{ label:'El Verloon Desert', gen: genElVerloon, spawn:{oasis:{x:TILE*54, y:TILE*24}, dune:{x:TILE*18, y:TILE*48}} }
   };
 
   function saveMeta(){ try{ localStorage.setItem('ap-meta', JSON.stringify({mapName})); }catch(e){} }
@@ -606,7 +887,7 @@
   }
   function changeMap(next, spawnTag='main'){ transition.to={next, spawnTag}; }
 
-  function softResetRuntime(){ ents.length=0; projs.length=0; drops.length=0; decor.length=0; turrets.length=0; }
+  function softResetRuntime(){ ents.length=0; projs.length=0; drops.length=0; decor.length=0; turrets.length=0; portals.length=0; }
 
   function interactHarbor(){
     if(mapName==='plains'){
@@ -628,6 +909,47 @@
     ctx.fillStyle='#cfe'; ctx.fillText('⛵ E', s.x-14, s.y-30);
   }
 
+  // ==== SECTION: NPC SPRITES (Patch 2) ====
+  const NPC_SPRITES = {
+    sign: { base:'#3a4b5f', glyph:'ℹ️' },
+    merchant: { base:'#3a5f3a', glyph:'🛒' },
+    trainer: { base:'#5b3a5f', glyph:'★' },
+    storage: { base:'#3a3f5f', glyph:'🧳' },
+    cartmaster: { base:'#5f4a2a', glyph:'🛞' },
+    cart: { base:'#445', glyph:'' },
+    harbor: { base:'#2b4a6a', glyph:'⛵' },
+    ferryJ: { base:'#2b4a6a', glyph:'⛵' },
+    portal: { base:'#3a4b7a', glyph:'🌀' }
+  };
+  function drawNPCSprite(n){
+    const bob = Math.sin(performance.now()/600 + (n.x+n.y)*0.02) * 1.2;
+    const s=worldToScreen(n.x,n.y + bob);
+    if(n.npc==='cart') { drawCart(n); return; }
+    const def = NPC_SPRITES[n.npc] || {base:'#3a4b5f', glyph:'?'};
+    // soft blob shadow
+    ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(s.x, s.y+14, 16, 8, 0, 0, Math.PI*2); ctx.fill();
+    // bubble body
+    ctx.fillStyle=def.base; ctx.beginPath(); ctx.arc(s.x, s.y, 18, 0, 6.28); ctx.fill();
+    // outline for clarity
+    ctx.strokeStyle='rgba(255,255,255,0.08)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(s.x, s.y, 18, 0, 6.28); ctx.stroke();
+    // glyph
+    ctx.fillStyle='#fff'; ctx.font='16px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; if(def.glyph) ctx.fillText(def.glyph, s.x, s.y+1);
+    // interaction hint
+    ctx.fillStyle='rgba(255,255,255,0.85)'; ctx.font='12px system-ui';
+    const hint = (n.npc==='harbor'||n.npc==='ferryJ')? '⛵ E' : (n.npc==='portal'? '🌀 E' : 'E');
+    ctx.fillText(hint, s.x, s.y-24);
+  }
+  function drawNPCSprites(){
+    const list=[sign, merchant, trainer, storageNPC, cartMaster];
+    if(summonedCart) list.push(summonedCart);
+    if(mapName==='plains') list.push(harbor);
+    if(mapName==='junon') list.push(ferryJ);
+    for(const p of portals){ list.push(p); }
+    // depth sort by y
+    list.sort((a,b)=>a.y-b.y);
+    for(const n of list){ drawNPCSprite(n); }
+  }
+
   function genPlains(){
     for(let i=0;i<MAP_W*MAP_H;i++){
       let x=i%MAP_W, y=(i/MAP_W)|0;
@@ -640,8 +962,14 @@
       if(tiles[y*MAP_W+x]===0 && Math.random()>0.965) decor.push({t: Math.random()>0.6? 'tree':'rock', x:x*TILE+8+Math.random()*(TILE-16), y:y*TILE+8+Math.random()*(TILE-16)});
       if(tiles[y*MAP_W+x]===0 && Math.random()>0.985) decor.push({t:'flower', x:x*TILE+10+Math.random()*(TILE-20), y:y*TILE+10+Math.random()*(TILE-20)});
     }}
-    sign.x = TILE*6.5; sign.y = TILE*4.8; merchant.x = TILE*9.5; merchant.y = TILE*5.7; trainer.x = TILE*7.5; trainer.y = TILE*5.8; cartMaster.x = TILE*5.0; cartMaster.y = TILE*7.6;
+    sign.x = TILE*6.5; sign.y = TILE*4.8; merchant.x = TILE*9.5; merchant.y = TILE*5.7; trainer.x = TILE*7.5; trainer.y = TILE*5.8; cartMaster.x = TILE*5.0; cartMaster.y = TILE*7.6; storageNPC.x = TILE*6.8; storageNPC.y = TILE*7.0;
+    // Define a circular safe town around the starting hub
+    townZones.length = 0;
+    townZones.push({type:'circle', x:TILE*7.5, y:TILE*6.2, r:TILE*5.6});
     el('zone').textContent = MAPS.plains.label;
+    // Portals: Plains → Zant
+    portals.length = 0;
+    portals.push({kind:'npc', npc:'portal', x:TILE*16, y:TILE*10, r:22, dest:'zant', tag:'plaza'});
   }
 
   function genJunon(){
@@ -652,17 +980,77 @@
     for(let y=cy+ch; y<cy+ch+2; y++) for(let x=cx-2; x<cx+cw+2; x++) tiles[y*MAP_W+x]=2;
     for(let y=cy-2; y<cy+ch+2; y++) for(let x=cx-2; x<cx; x++) tiles[y*MAP_W+x]=2;
     for(let y=cy-2; y<cy+ch+2; y++) for(let x=cx+cw; x<cx+cw+2; x++) tiles[y*MAP_W+x]=2;
+    // Bridge from docks across the eastern canal into the castle
+    const by = cy + Math.floor(ch*0.5);
+    for(let x=cx+cw-1; x<cx+cw+2; x++){
+      for(let y=by-1; y<=by+1; y++) tiles[y*MAP_W+x] = 1;
+    }
+    // Optional south bridge
+    const bsy = cy+ch; const bsx = cx + Math.floor(cw*0.35);
+    for(let y=bsy; y<bsy+2; y++){
+      for(let x=bsx-1; x<=bsx+1; x++) tiles[y*MAP_W+x]=1;
+    }
     const bld = (bx,by,bw,bh)=> decor.push({t:'bld', x:(bx+0.5)*TILE, y:(by+0.5)*TILE, w:bw*TILE, h:bh*TILE});
     bld(cx+2, cy+3, 8, 6); bld(cx+15, cy+3, 8, 6); bld(cx+28, cy+3, 6, 6);
     bld(cx+3, cy+16, 10, 7); bld(cx+19, cy+16, 8, 7); bld(cx+29, cy+16, 8, 7);
     ferryJ.x = (cx+cw+1)*TILE; ferryJ.y = (cy+ch+1)*TILE;
     merchant.x = (cx+Math.floor(cw/2))*TILE; merchant.y = (cy+12)*TILE;
     trainer.x = (cx+Math.floor(cw/2)-2)*TILE; trainer.y = (cy+10)*TILE;
+    storageNPC.x = (cx+Math.floor(cw/2)+3)*TILE; storageNPC.y = (cy+10)*TILE;
     sign.x = (cx+Math.floor(cw/2))*TILE; sign.y = (cy+9)*TILE;
+    // Define the inner city rectangle as safe town (slightly expanded)
+    townZones.length = 0;
+    townZones.push({type:'rect', x:(cx-1)*TILE, y:(cy-1)*TILE, w:(cw+2)*TILE, h:(ch+2)*TILE});
     el('zone').textContent = MAPS.junon.label;
     // Junon spawns (Patch 7): tougher mobs
     const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0||tt===1){spawnMob(t,x*TILE+TILE/2,y*TILE+TILE/2);n++;}}};
     spawnOut('moldy',60); spawnOut('moldy_elite',20); spawnOut('rockgolem',8);
+    // Portal to El Verloon
+    portals.length = 0;
+    portals.push({kind:'npc', npc:'portal', x:(cx+cw+1)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'elverloon', tag:'oasis'});
+  }
+
+  // Zant — compact village with low-mid mobs nearby
+  function genZant(){
+    for(let i=0;i<MAP_W*MAP_H;i++) tiles[i]=0;
+    const cx=20, cy=16, cw=26, ch=18;
+    for(let y=cy; y<cy+ch; y++) for(let x=cx; x<cx+cw; x++) tiles[y*MAP_W+x] = 1;
+    // scatter decor
+    decor.length=0;
+    for(let i=0;i<80;i++) decor.push({t: Math.random()>0.5? 'tree':'flower', x: rand(TILE*4, TILE*(MAP_W-4)), y: rand(TILE*4, TILE*(MAP_H-4))});
+    // NPCs
+    sign.x=(cx+Math.floor(cw/2))*TILE; sign.y=(cy+2)*TILE;
+    merchant.x=(cx+Math.floor(cw/2)-3)*TILE; merchant.y=(cy+8)*TILE;
+    trainer.x=(cx+Math.floor(cw/2)+3)*TILE; trainer.y=(cy+8)*TILE;
+    storageNPC.x=(cx+Math.floor(cw/2))*TILE; storageNPC.y=(cy+10)*TILE;
+    // town safe zone
+    townZones.length=0; townZones.push({type:'rect', x:(cx-1)*TILE, y:(cy-1)*TILE, w:(cw+2)*TILE, h:(ch+2)*TILE});
+    el('zone').textContent = MAPS.zant.label;
+    // spawns outside town
+    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
+    spawnOut('choropy',40); spawnOut('woopie',24);
+    // portals: Zant → Plains, Zant → Junon
+    portals.length=0;
+    portals.push({kind:'npc', npc:'portal', x:(cx-2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'plains', tag:'main'});
+    portals.push({kind:'npc', npc:'portal', x:(cx+cw+2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'junon', tag:'gate'});
+  }
+
+  // El Verloon Desert — sandy open area with tougher mobs
+  function genElVerloon(){
+    for(let i=0;i<MAP_W*MAP_H;i++) tiles[i]=1; // sand as dirt
+    // Create oases (water patches)
+    for(let i=0;i<4;i++){
+      const ox=(Math.random()*MAP_W)|0, oy=(Math.random()*MAP_H)|0;
+      for(let y=oy-3;y<=oy+3;y++) for(let x=ox-5;x<=ox+5;x++) if(x>=0&&y>=0&&x<MAP_W&&y<MAP_H) tiles[y*MAP_W+x]=2;
+    }
+    decor.length=0; for(let i=0;i<90;i++) decor.push({t:'rock', x: rand(TILE*3,TILE*(MAP_W-3)), y: rand(TILE*3,TILE*(MAP_H-3))});
+    // NPC cluster near an oasis
+    merchant.x = TILE*54; merchant.y = TILE*24; trainer.x = TILE*56; trainer.y = TILE*24; storageNPC.x = TILE*55; storageNPC.y = TILE*26; sign.x = TILE*54; sign.y = TILE*22;
+    townZones.length=0; townZones.push({type:'circle', x:TILE*54, y:TILE*24, r:TILE*6});
+    el('zone').textContent = MAPS.elverloon.label;
+    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1600){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0||tt===1){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
+    spawnOut('woopie',50); spawnOut('moldy_elite',18); spawnOut('rockgolem',10);
+    portals.length=0; portals.push({kind:'npc', npc:'portal', x:TILE*18, y:TILE*48, r:22, dest:'junon', tag:'gate'});
   }
 
   // Cart summon
@@ -691,17 +1079,37 @@
     return (it && it.wep) ? it.wep : 'fist';
   }
 
+  // Aiming decoupled from facing. Player sprite does not rotate with the mouse.
+  function getAimDir(){
+    return Math.atan2((mouse.y+camera.y)-player.y, (mouse.x+camera.x)-player.x);
+  }
+
   function shoot(sx, sy, angle, dmg, speed, owner='player', kind='arrow'){
     const vx = Math.cos(angle) * speed;
     const vy = Math.sin(angle) * speed;
-    projs.push({ x:sx, y:sy, vx, vy, dmg, ttl: 1.6, owner, kind, trailT: 0 });
+    if(owner==='player'){
+      const out = calcDamage(dmg, kind==='magic'? 'magic':'physical');
+      projs.push({ x:sx, y:sy, vx, vy, dmg: out.dmg, crit: out.crit, ttl: 1.6, owner, kind, trailT: 0, accRoll: true });
+    } else {
+      projs.push({ x:sx, y:sy, vx, vy, dmg, ttl: 1.6, owner, kind, trailT: 0 });
+    }
   }
 
   function drawProjectile(p){
     const s = worldToScreen(p.x,p.y);
-    ctx.fillStyle = p.owner==='player' ? (p.kind==='magic' ? '#d8b6ff' : '#cfe') : '#f88';
-    ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, Math.PI*2); ctx.fill();
-    if(p.trailT<=0){ p.trailT = 0.06; fx.push({t:0.06, kind:'trail', x:p.x - p.vx*0.04, y:p.y - p.vy*0.04}); } else { p.trailT -= 0.016; }
+    if(p.kind==='rocket'){
+      // rocket body
+      ctx.save(); ctx.translate(s.x,s.y); const ang=Math.atan2(p.vy,p.vx); ctx.rotate(ang);
+      ctx.fillStyle='#f5a76e'; ctx.fillRect(-8,-3,16,6); // body
+      ctx.fillStyle='#ffe29a'; ctx.beginPath(); ctx.moveTo(-10,-4); ctx.lineTo(-16,0); ctx.lineTo(-10,4); ctx.closePath(); ctx.fill(); // flame
+      ctx.restore();
+      // thick smoke trail
+      if(p.trailT<=0){ p.trailT = 0.04; fx.push({t:0.25, kind:'trail', x:p.x - p.vx*0.06, y:p.y - p.vy*0.06}); } else { p.trailT -= 0.016; }
+    } else {
+      ctx.fillStyle = p.owner==='player' ? (p.kind==='magic' ? '#d8b6ff' : '#cfe') : '#f88';
+      ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, Math.PI*2); ctx.fill();
+      if(p.trailT<=0){ p.trailT = 0.06; fx.push({t:0.06, kind:'trail', x:p.x - p.vx*0.04, y:p.y - p.vy*0.04}); } else { p.trailT -= 0.016; }
+    }
   }
 
   function primaryAttack(){
@@ -709,10 +1117,11 @@
     player.atkTimer = player.atkCd;
     if(wep === 'sword'){ arcStrike(58, 1.0); vibrate(8); return; }
     if(wep === 'katar'){ const oldCd = player.atkCd; player.atkTimer = Math.max(0.12, oldCd * 0.55); arcStrike(42, 0.55, 2); vibrate(6); return; }
-    if(wep === 'bow'){ const spread = mouse.down ? (Math.random()*0.02 - 0.01) : 0; const ang = player.dir + spread; shoot(player.x, player.y, ang, player.atk*0.95, player.projSpeed+90, 'player', 'arrow'); return; }
-    if(wep === 'staff'){ shoot(player.x, player.y, player.dir, player.atk*1.2+6, player.projSpeed+10, 'player', 'magic'); player.mp = clamp(player.mp-2, 0, player.mpMax); return; }
-    if(wep === 'wand'){ const oldCd = player.atkCd; player.atkTimer = Math.max(0.14, oldCd * 0.8); shoot(player.x, player.y, player.dir, player.atk*0.85+4, player.projSpeed+20, 'player', 'magic'); return; }
-    shoot(player.x, player.y, player.dir, player.atk*0.6, player.projSpeed, 'player', 'arrow');
+    if(wep === 'launcher'){ const ang = getAimDir(); shoot(player.x, player.y, ang, player.atk*1.3+10, 260, 'player', 'rocket'); return; }
+    if(wep === 'bow'){ const spread = mouse.down ? (Math.random()*0.02 - 0.01) : 0; const ang = getAimDir() + spread; shoot(player.x, player.y, ang, player.atk*0.95, player.projSpeed+90, 'player', 'arrow'); return; }
+    if(wep === 'staff'){ shoot(player.x, player.y, getAimDir(), player.atk*1.2+6, player.projSpeed+10, 'player', 'magic'); player.mp = clamp(player.mp-2, 0, player.mpMax); return; }
+    if(wep === 'wand'){ const oldCd = player.atkCd; player.atkTimer = Math.max(0.14, oldCd * 0.8); shoot(player.x, player.y, getAimDir(), player.atk*0.85+4, player.projSpeed+20, 'player', 'magic'); return; }
+    shoot(player.x, player.y, getAimDir(), player.atk*0.6, player.projSpeed, 'player', 'arrow');
   }
 
   // PATCH 2: XP, drops, onMobKilled
@@ -725,6 +1134,7 @@
       player.baseAtk += 2;
       player.hpMax += 10;
       player.hp = player.hpMax;
+      player.statPoints = (player.statPoints|0) + 3;
       recalcStats();
       notify('Level Up! Lv '+player.level);
     }
@@ -781,6 +1191,16 @@
       if(Math.random()<0.35) rolls.push('potion_hp');
       if(Math.random()<0.15) rolls.push('leather_armor');
       if(Math.random()<0.12) rolls.push('royal_core');
+    }
+    if(m.type==='choropy'){
+      if(Math.random()<0.28) rolls.push('potion_mp');
+      if(Math.random()<0.10) rolls.push('feather_charm');
+      if(Math.random()<0.04) rolls.push('butterfly_wings');
+    }
+    if(m.type==='woopie'){
+      if(Math.random()<0.30) rolls.push('potion_hp');
+      if(Math.random()<0.08) rolls.push('runner_shoes');
+      if(Math.random()<0.05) rolls.push('angel_wings');
     }
     for(const id of rolls){ if(id==='potion_hp' || id==='potion_mp'){ drops.push({x:m.x+rand(-12,12), y:m.y+rand(-12,12), t:0, item:id, stack: (Math.random()<0.5?2:1)}); } else { drops.push({x:m.x+rand(-12,12), y:m.y+rand(-12,12), t:0, item:id}); } }
   }
@@ -867,6 +1287,7 @@
   function tick(){ const t = now(); const dt = Math.min(0.033, t-lt); lt=t; update(dt); draw(); requestAnimationFrame(tick); }
 
   function update(dt){
+    updatePerf(dt);
     for(let i=player.buffs.length-1;i>=0;i--){ const b=player.buffs[i]; b.t-=dt; if(b.t<=0){ player.buffs.splice(i,1); recalcStats(); } }
     for(let i=0;i<4;i++){ if(player.skillCd[i]>0){ player.skillCd[i]-=dt; if(player.skillCd[i]<0) player.skillCd[i]=0; if(player.skillCd[i]===0) scds[i].style.display='none'; else { scds[i].style.display='grid'; scds[i].textContent= player.skillCd[i].toFixed(1); } } }
 
@@ -874,9 +1295,19 @@
     let vx=0, vy=0;
     if(keys['w']||keys['arrowup']) vy-=1; if(keys['s']||keys['arrowdown']) vy+=1; if(keys['a']||keys['arrowleft']) vx-=1; if(keys['d']||keys['arrowright']) vx+=1;
     if(Math.hypot(joy.dx, joy.dy)>0.01){ vx += joy.dx*1.5; vy += joy.dy*1.5; }
+    // Realistic-ish physics: acceleration and friction
+    player.vx = (player.vx||0); player.vy = (player.vy||0);
     const mag=Math.hypot(vx,vy); if(mag>0){ vx/=mag; vy/=mag; }
-    const sp=player.speed; let nx = player.x + vx*sp*dt; let ny = player.y + vy*sp*dt; if(!blocked(nx, player.y)) player.x=nx; if(!blocked(player.x, ny)) player.y=ny;
-    player.dir = Math.atan2((mouse.y+camera.y)-player.y, (mouse.x+camera.x)-player.x);
+    const accel = player.speed * 6.5; // acceleration coefficient
+    const maxSpeed = player.speed;
+    player.vx += vx*accel*dt; player.vy += vy*accel*dt;
+    // Apply friction when no input
+    const friction = 4.2; player.vx -= player.vx*friction*dt; player.vy -= player.vy*friction*dt;
+    // Clamp to max speed
+    const spd=Math.hypot(player.vx,player.vy); if(spd>maxSpeed){ const s=maxSpeed/spd; player.vx*=s; player.vy*=s; }
+    let nx = player.x + player.vx*dt; let ny = player.y + player.vy*dt; if(!blocked(nx, player.y)) player.x=nx; if(!blocked(player.x, ny)) player.y=ny;
+    // Player faces last movement or firing direction, not the mouse, for immersion
+    if(vx!==0 || vy!==0){ player.dir = Math.atan2(vy, vx); }
 
     // Camera follow
     camera.x = clamp(player.x - vw/2, 0, MAP_W*TILE - vw); camera.y = clamp(player.y - vh/2, 0, MAP_H*TILE - vh);
@@ -891,18 +1322,47 @@
       if(nearest(sign)<TILE*1.2){ interactSign(); keys['e']=false; }
       else if(nearest(merchant)<TILE*1.8){ openShop(); keys['e']=false; }
       else if(nearest(trainer)<TILE*1.8){ openJobs(); keys['e']=false; }
+      else if(nearest(storageNPC)<TILE*1.8){ openStorage(); keys['e']=false; }
       else if(nearest(cartMaster)<TILE*1.8){ interactCartMaster(); keys['e']=false; }
       else if(summonedCart && nearest(summonedCart)<TILE*1.8){ mountCart(); keys['e']=false; }
       else if(nearest(harbor)<TILE*1.8){ interactHarbor(); keys['e']=false; }
       else if(mapName==='junon' && nearest(ferryJ)<TILE*1.8){ interactHarbor(); keys['e']=false; }
+      else {
+        // Portals interaction
+        for(const p of portals){ if(dist(player.x,player.y,p.x,p.y)<(p.r||22)){ changeMap(p.dest, p.tag||'main'); keys['e']=false; break; } }
+      }
     }
 
     // Projectiles & turrets
-    for(let i=projs.length-1;i>=0;i--){ const p=projs[i]; p.x+=p.vx*dt; p.y+=p.vy*dt; p.ttl-=dt; if(p.gravity) p.vy+=p.gravity*dt; if(p.ttl<=0){ const px=p.x,py=p.y; if(p.onExpire) p.onExpire(px,py); projs.splice(i,1); continue; } if(p.owner==='player'){ for(let j=ents.length-1;j>=0;j--){ const m=ents[j]; if(!m.alive) continue; if(dist(p.x,p.y,m.x,m.y)<m.r+6){ m.hp -= p.dmg; m.hurt=0.15; projs.splice(i,1); if(m.hp<=0){ m.alive=false; onMobKilled(m); ents.splice(j,1);} break; }} } else { if(dist(p.x,p.y,player.x,player.y)<player.r+6){ dmgPlayer(p.dmg); projs.splice(i,1); } } }
+  for(let i=projs.length-1;i>=0;i--){ const p=projs[i]; p.x+=p.vx*dt; p.y+=p.vy*dt; p.ttl-=dt; if(p.gravity) p.vy+=p.gravity*dt; if(p.ttl<=0){ const px=p.x,py=p.y; if(p.onExpire) p.onExpire(px,py); projs.splice(i,1); continue; } if(p.owner==='player'){ for(let j=ents.length-1;j>=0;j--){ const m=ents[j]; if(!m.alive) continue; if(dist(p.x,p.y,m.x,m.y)<m.r+6){ if(p.accRoll? rollHitAgainst(m) : true){ m.hp -= p.dmg; if(p.crit) showDamage(m.x,m.y,p.dmg,true); else showDamage(m.x,m.y,p.dmg,false); m.hurt=0.15; } else { showMiss(m.x,m.y); } projs.splice(i,1); if(m.hp<=0){ m.alive=false; onMobKilled(m); ents.splice(j,1);} break; }} } else { if(dist(p.x,p.y,player.x,player.y)<player.r+6){ dmgPlayer(p.dmg); projs.splice(i,1); } } }
     for(let i=turrets.length-1;i>=0;i--){ const t=turrets[i]; t.t-=dt; if(t.t<=0){ turrets.splice(i,1); continue; } if(Math.random()<0.06){ const m=ents.find(m=>m.alive && dist(t.x,t.y,m.x,m.y)<250); if(m){ const a=Math.atan2(m.y-t.y,m.x-t.x); shoot(t.x,t.y,a,player.atk*0.6,360,'player'); } } }
 
     // Mobs AI
-    for(const m of ents){ if(!m.alive) continue; const d = dist(m.x,m.y,player.x,player.y); if(d<460){ m.aggro=1; } if(m.aggro){ const a = Math.atan2(player.y-m.y, player.x-m.x); let mx = m.x + Math.cos(a)*m.speed*dt; let my = m.y + Math.sin(a)*m.speed*dt; if(!blocked(mx, m.y)) m.x=mx; if(!blocked(m.x, my)) m.y=my; if(d<m.r+player.r+2){ dmgPlayer( (m.type==='jelly'? 5 : m.type==='flanae'? 7 : 8)*dt ); } if(m.type==='pumpkin' && Math.random()<0.008){ const a=Math.atan2(player.y-m.y,player.x-m.x); shoot(m.x,m.y,a,8,220,'mob'); } if(m.type==='jellyking' && Math.random()<0.006){ const a=Math.atan2(player.y-m.y,player.x-m.x); shoot(m.x,m.y,a,14,260,'mob'); } } else { m.x += (r()-0.5)*20*dt; m.y += (r()-0.5)*20*dt; } if(m.hurt>0) m.hurt-=dt; else m.hurt=0; }
+    for(const m of ents){
+      if(!m.alive) continue;
+      // Keep mobs out of town zones
+      if(isInTown(m.x, m.y)) { pushOutOfTown(m); m.aggro=0; }
+      const d = dist(m.x,m.y,player.x,player.y);
+      if(d<460){ m.aggro=1; }
+      if(m.aggro){
+        const a = Math.atan2(player.y-m.y, player.x-m.x);
+        let mx = m.x + Math.cos(a)*m.speed*dt; let my = m.y + Math.sin(a)*m.speed*dt;
+        if(!blocked(mx, m.y) && !isInTown(mx, m.y)) m.x=mx;
+        if(!blocked(m.x, my) && !isInTown(m.x, my)) m.y=my;
+        if(d<m.r+player.r+2 && !isInTown(player.x, player.y)){
+          dmgPlayer( (m.type==='jelly'? 5 : m.type==='flanae'? 7 : 8)*dt );
+        }
+        if(m.type==='pumpkin' && Math.random()<0.008 && !isInTown(player.x, player.y)){
+          const a=Math.atan2(player.y-m.y,player.x-m.x); shoot(m.x,m.y,a,8,220,'mob');
+        }
+        if(m.type==='jellyking' && Math.random()<0.006 && !isInTown(player.x, player.y)){
+          const a=Math.atan2(player.y-m.y,player.x-m.x); shoot(m.x,m.y,a,14,260,'mob');
+        }
+      } else {
+        m.x += (r()-0.5)*20*dt; m.y += (r()-0.5)*20*dt;
+      }
+      if(m.hurt>0) m.hurt-=dt; else m.hurt=0;
+    }
 
     // Drops pickup
     for(let i=drops.length-1;i>=0;i--){ const d=drops[i]; d.t+=dt; if(dist(player.x,player.y,d.x,d.y)<28){ if(d.item){ addToInv(d.item, d.stack||1); notify('Picked: '+ITEM_DB[d.item].name); } if(d.gold){ player.gold+=d.gold; notify('+'+d.gold+' gold'); } drops.splice(i,1); vibrate(10); } }
@@ -919,8 +1379,23 @@
     updateQuestText();
   }
 
+  // ==== SECTION: DRAW PIPELINE via Renderer ====
   function draw(){
-    ctx.clearRect(0,0,vw,vh);
+    Renderer.beginFrame();
+    Renderer.draw.drawTiles();
+    Renderer.draw.drawDecor();
+    Renderer.draw.drawNPCs();
+    Renderer.draw.drawMobs();
+    Renderer.draw.drawProjs();
+    Renderer.draw.drawPlayer();
+    Renderer.draw.drawFX();
+    Renderer.draw.drawOverlay();
+    Renderer.endFrame();
+  }
+
+  // Backing implementations (Canvas for now)
+  function drawTiles(){
+    // tiles
     // Tiles
     const sx = Math.floor(camera.x/TILE), sy = Math.floor(camera.y/TILE); const ex = Math.ceil((camera.x+vw)/TILE), ey=Math.ceil((camera.y+vh)/TILE);
     for(let y=sy;y<ey;y++){
@@ -949,24 +1424,93 @@
         }
       }
     }
+  }
+  function drawDecor(){
     // Decor
     for(const d of decor){ const s=worldToScreen(d.x,d.y); if(s.x<-50||s.y<-50||s.x>vw+50||s.y>vh+50) continue; if(d.t==='tree'){ ctx.fillStyle='#0f3925'; ctx.beginPath(); ctx.arc(s.x,s.y,20,0,6.28); ctx.fill(); ctx.fillStyle='#205b3a'; ctx.beginPath(); ctx.arc(s.x-8,s.y-10,18,0,6.28); ctx.fill(); } else if(d.t==='rock'){ ctx.fillStyle='#3b4653'; ctx.beginPath(); ctx.arc(s.x,s.y,10,0,6.28); ctx.fill(); } else { ctx.fillStyle='#8fd3a0'; ctx.fillRect(s.x-2,s.y-2,4,4); } }
-    // NPCs
-    drawSign(sign); drawMerchant(merchant); drawTrainer(trainer); drawCartMaster(cartMaster); if(summonedCart) drawCart(summonedCart);
-    if(mapName==='plains') drawBoatNPC(harbor);
-    if(mapName==='junon')  drawBoatNPC(ferryJ);
-    // Mobs
-    for(const m of ents){ if(!m.alive) continue; const s=worldToScreen(m.x,m.y); if(s.x<-40||s.y<-40||s.x>vw+40||s.y>vh+40) continue; drawMobSprite(m); }
-    // Projectiles
-    for(const p of projs){ drawProjectile(p); }
-    // Drops (visible gold icons)
+  }
+  function drawNPCs(){
+    // replaced by sprite-based draws (Patch 2) but keep calls grouped
+    drawNPCSprites();
+  }
+  function drawMobsSorted(){
+    // depth-sort mobs + drops and render
+    const visibleMobs = [];
+    for(const m of ents){ if(!m.alive) continue; const s=worldToScreen(m.x,m.y); if(s.x<-40||s.y<-40||s.x>vw+40||s.y>vh+40) continue; visibleMobs.push({m, sy:s.y}); }
+    visibleMobs.sort((a,b)=>a.sy-b.sy);
+    for(const v of visibleMobs){ drawMobSprite(v.m); }
+    // Drops (gold icons)
     for(const d of drops){ if(d.gold){ const s=worldToScreen(d.x,d.y); ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font='16px system-ui'; ctx.fillStyle= getComputedStyle(document.documentElement).getPropertyValue('--gold') || '#f1c40f'; const bob = Math.sin(performance.now()/200 + d.x*0.05)*2; ctx.fillText('✦', s.x, s.y - 6 + bob); ctx.restore(); } }
-    // Player last
-    drawPlayer();
-    // FX simple trails
-    ctx.fillStyle='rgba(255,255,255,0.25)'; for(const f of fx){ if(f.kind==='trail'){ const s=worldToScreen(f.x,f.y); ctx.beginPath(); ctx.arc(s.x,s.y,3,0,6.28); ctx.fill(); } if(f.kind==='arc'){ const s=worldToScreen(f.x,f.y); ctx.strokeStyle='rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.arc(s.x,s.y,f.r, f.a-0.9, f.a+0.9); ctx.stroke(); } if(f.kind==='boom'){ const s=worldToScreen(f.x,f.y); ctx.strokeStyle='rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.arc(s.x,s.y,24,0,6.28); ctx.stroke(); }
+  }
+  function drawProjectilesStage(){ for(const p of projs){ drawProjectile(p); } }
+  function drawFXStage(){
+    // FX simple trails and damage numbers
+    ctx.fillStyle='rgba(255,255,255,0.25)';
+    for(const f of fx){
+      if(f.kind==='trail'){
+        const s=worldToScreen(f.x,f.y); ctx.beginPath(); ctx.arc(s.x,s.y,3,0,6.28); ctx.fill();
+      } else if(f.kind==='arc'){
+        const s=worldToScreen(f.x,f.y); ctx.strokeStyle='rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.arc(s.x,s.y,f.r, f.a-0.9, f.a+0.9); ctx.stroke();
+      } else if(f.kind==='boom'){
+        const s=worldToScreen(f.x,f.y); ctx.strokeStyle='rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.arc(s.x,s.y,24,0,6.28); ctx.stroke();
+      } else if(f.kind==='dmg'){
+        const s=worldToScreen(f.x,f.y);
+        const life = f.t; const alpha = Math.max(0, Math.min(1, life/0.9));
+        const rise = (1 - alpha) * 28;
+        ctx.save();
+        ctx.font = f.crit? 'bold 28px system-ui' : '22px system-ui';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillStyle = f.crit? '#ffd24a' : '#e6eef7';
+        ctx.globalAlpha = 0.85*alpha;
+        ctx.fillText(String(f.val), s.x, s.y - 10 - rise);
+        ctx.restore();
+      } else if(f.kind==='miss'){
+        const s=worldToScreen(f.x,f.y);
+        ctx.save(); ctx.font='bold 18px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#ff8b73'; ctx.globalAlpha=0.9; ctx.fillText('MISS', s.x, s.y-22); ctx.restore();
+      }
     }
-    drawTransitionOverlay();
+    // Job trainer guide arrow
+    if(jobArrow.active){
+      const s=worldToScreen(trainer.x, trainer.y);
+      // Clamp to screen edges with padding
+      const pad=20; let ax=clamp(s.x, pad, vw-pad), ay=clamp(s.y, pad, vh-pad);
+      const a = Math.atan2(ay - (vh-70), ax - 40); // direction from minimap area
+      ctx.save();
+      ctx.translate(ax, ay);
+      ctx.rotate(a);
+      ctx.fillStyle='rgba(255,255,255,0.9)';
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-16,6); ctx.lineTo(-16,-6); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+
+    // Minimap render
+    if(mapCtx){
+      mapCtx.clearRect(0,0,minimapCanvas.width,minimapCanvas.height);
+      const mmW=minimapCanvas.width, mmH=minimapCanvas.height;
+      mapCtx.fillStyle='rgba(255,255,255,0.06)'; mapCtx.fillRect(0,0,mmW,mmH);
+      // Map tiles overview
+      const scaleX = mmW/(MAP_W*TILE); const scaleY=mmH/(MAP_H*TILE);
+      for(let y=0;y<MAP_H;y++){
+        for(let x=0;x<MAP_W;x++){
+          const t=tiles[y*MAP_W+x];
+          if(t===1){ mapCtx.fillStyle='rgba(255,255,255,0.14)'; }
+          else if(t===2){ mapCtx.fillStyle='rgba(80,160,200,0.8)'; }
+          else { mapCtx.fillStyle='rgba(120,180,120,0.2)'; }
+          mapCtx.fillRect(x*TILE*scaleX, y*TILE*scaleY, TILE*scaleX, TILE*scaleY);
+        }
+      }
+      const drawDot=(x,y,color,r)=>{ mapCtx.fillStyle=color; mapCtx.beginPath(); mapCtx.arc(x*scaleX, y*scaleY, r, 0, Math.PI*2); mapCtx.fill(); };
+      drawDot(player.x, player.y, '#71e6a2', 4);
+      drawDot(merchant.x, merchant.y, '#f1c40f', 4.5);
+      drawDot(trainer.x, trainer.y, '#ffffff', 4.5);
+      if(summonedCart) drawDot(summonedCart.x, summonedCart.y, '#6cf', 3.5);
+      // Quest marker (!) above NPC if a quest is available
+      const questNpc = (qIndex===0? sign : (qIndex===3? cartMaster : (qIndex===4? trainer : null)));
+      if(questNpc){ mapCtx.fillStyle='#ffd24a'; mapCtx.font='bold 12px system-ui'; mapCtx.textAlign='center'; mapCtx.fillText('!', questNpc.x*scaleX, questNpc.y*scaleY-8); }
+      // camera rectangle
+      mapCtx.strokeStyle='rgba(255,255,255,0.35)'; mapCtx.lineWidth=1;
+      mapCtx.strokeRect(camera.x*scaleX, camera.y*scaleY, vw*scaleX, vh*scaleY);
+    }
   }
 
   // Sprite helpers (PATCH 4)
@@ -974,6 +1518,28 @@
     const s = worldToScreen(player.x, player.y);
     ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(s.x, s.y+16, 16, 8, 0, 0, Math.PI*2); ctx.fill();
     ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(player.dir);
+    // Wings (draw behind body)
+    if(player.eq && player.eq.wings){
+      ctx.save();
+      const style = ITEM_DB[player.eq.wings]?.style || 'butterfly';
+      ctx.globalAlpha = 0.92;
+      if(style==='angel'){
+        ctx.fillStyle = 'rgba(240,245,255,0.95)';
+        for(let i=0;i<3;i++){
+          ctx.beginPath(); ctx.ellipse(-12 - i*10, -6 - i*4, 14-i*2, 10-i*2, -0.4, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(-12 - i*10,  8 + i*4, 14-i*2, 10-i*2,  0.4, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.strokeStyle='rgba(180,190,210,0.9)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(-10,-14); ctx.lineTo(-40,0); ctx.lineTo(-10,14); ctx.stroke();
+      } else {
+        const t = performance.now()/800; const flap = Math.sin(t)*0.2;
+        ctx.fillStyle = '#ff9ad6'; ctx.beginPath(); ctx.ellipse(-16, -8, 18, 12, -0.6+flap, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(-16,  10, 18, 12,  0.6-flap, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#6cc9ff'; ctx.beginPath(); ctx.ellipse(-30, -4, 14, 10, -0.6+flap, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(-30,  6, 14, 10,  0.6-flap, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(-10,-12); ctx.lineTo(-36,-2); ctx.lineTo(-10,12); ctx.stroke();
+      }
+      ctx.restore();
+    }
     ctx.fillStyle = '#2a6aa8'; ctx.fillRect(-10, -14, 20, 28);
     ctx.fillStyle = '#f2d6c2'; ctx.beginPath(); ctx.arc(0, -24, 8, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = '#334'; ctx.fillRect(-10, 10, 8, 10); ctx.fillRect(2, 10, 8, 10);
@@ -998,7 +1564,16 @@
     else if(m.type==='moldy'){ const g=ctx.createLinearGradient(0, s.y-m.r, 0, s.y+m.r); g.addColorStop(0,'#8dcf6a'); g.addColorStop(1,'#537a3d'); ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(s.x, s.y+4, m.r, m.r-4, 0, 0, Math.PI*2); ctx.fill(); }
     else if(m.type==='moldy_elite'){ const g=ctx.createLinearGradient(0, s.y-m.r, 0, s.y+m.r); g.addColorStop(0,'#79bf58'); g.addColorStop(1,'#3e6a2a'); ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(s.x, s.y+3, m.r+2, m.r-2, 0, 0, Math.PI*2); ctx.fill(); }
     else if(m.type==='rockgolem'){ ctx.fillStyle='#5b676f'; ctx.fillRect(s.x-m.r+2, s.y-m.r+6, (m.r*2)-4, (m.r*2)-10); ctx.fillStyle='#2a3238'; ctx.fillRect(s.x-6, s.y-4, 12, 8); }
+    else if(m.type==='choropy'){ ctx.fillStyle='#7ed957'; ctx.beginPath(); ctx.ellipse(s.x, s.y, m.r, m.r*0.7, 0, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#3a742a'; ctx.fillRect(s.x-2, s.y-m.r-6, 4, 10); }
+    else if(m.type==='woopie'){ ctx.fillStyle='#d9a35b'; ctx.beginPath(); ctx.ellipse(s.x, s.y, m.r+1, m.r*0.8, 0, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#5b3a2a'; ctx.fillRect(s.x-4, s.y-2, 8, 4); }
     ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(s.x-18, s.y-m.r-12, 36, 5); ctx.fillStyle='#e55'; ctx.fillRect(s.x-18, s.y-m.r-12, 36*(m.hp/m.hpMax), 5);
+    // Nameplate with difficulty color
+    const mlv = getMobLevel(m); const diff = mlv - player.level; const di = getDiffInfo(diff);
+    ctx.save(); ctx.textAlign='center'; ctx.textBaseline='alphabetic'; ctx.font='12px system-ui';
+    ctx.fillStyle = di.color;
+    const name = getMobName(m) + ' Lv' + mlv + ' — ' + di.label;
+    ctx.fillText(name, s.x, s.y - m.r - 18);
+    ctx.restore();
     ctx.restore();
   }
 
@@ -1007,11 +1582,42 @@
   function drawSign(n){ const s=worldToScreen(n.x,n.y); drawBadge(s.x,s.y,'ℹ️','#3a4b5f'); }
   function drawMerchant(n){ const s=worldToScreen(n.x,n.y); drawBadge(s.x,s.y,'🛒','#3a5f3a'); }
   function drawTrainer(n){ const s=worldToScreen(n.x,n.y); drawBadge(s.x,s.y,'★','#5b3a5f'); }
+  function drawStorage(n){ const s=worldToScreen(n.x,n.y); drawBadge(s.x,s.y,'🧳','#3a3f5f'); }
   function drawCartMaster(n){ const s=worldToScreen(n.x,n.y); drawBadge(s.x,s.y,'🛞','#5f4a2a'); }
   function drawCart(n){ const s=worldToScreen(n.x,n.y); ctx.fillStyle='#445'; ctx.fillRect(s.x-18,s.y-10,36,20); ctx.fillStyle='#ccc'; ctx.beginPath(); ctx.arc(s.x-10,s.y+12,6,0,6.28); ctx.arc(s.x+10,s.y+12,6,0,6.28); ctx.fill(); }
 
+  // Difficulty nameplate helpers
+  function getMobLevel(m){
+    if(m.type==='jelly') return 2;
+    if(m.type==='pumpkin') return 4;
+    if(m.type==='flanae') return 5;
+    if(m.type==='jellyking') return 12;
+    if(m.type==='moldy') return 9;
+    if(m.type==='moldy_elite') return 12;
+    if(m.type==='rockgolem') return 16;
+    if(m.type==='choropy') return 6;
+    if(m.type==='woopie') return 8;
+    return m.boss? 14 : 6;
+  }
+  function getMobName(m){
+    if(m.type==='jellyking') return 'Jelly King';
+    if(m.type==='flanae') return 'Flaenae';
+    if(m.type==='choropy') return 'Choropy';
+    if(m.type==='woopie') return 'Woopie';
+    return (m.type||'mob').replace(/_/g,' ').replace(/^./, c=>c.toUpperCase());
+  }
+  function getDiffInfo(diff){
+    // Grey=unchallenging, green=easy, yellow=challenging, red=hard, purple=impossible
+    if(diff<=-5) return {color:'#9aa3ad', label:'Unchallenging'};
+    if(diff<=-2) return {color:'#71e6a2', label:'Easy'};
+    if(Math.abs(diff)<=1) return {color:'#ffd24a', label:'Challenging'};
+    if(diff<=6) return {color:'#ff6b6b', label:'Hard'};
+    return {color:'#b077ff', label:'Impossible'};
+  }
+
   // Start
   setSkillsForJob(player.job);
+  loadStorage();
   showOverlay();
   tick();
 })();
