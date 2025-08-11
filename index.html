@@ -373,6 +373,7 @@ Later patches (not in this edit):
   const mapCtx = minimapCanvas.getContext && el('minimap').getContext? el('minimap').getContext('2d'):null;
   const hpEl = el('hp'), mpEl = el('mp'), xpEl = el('xp');
   const lvEl = el('lv'), goldEl = el('gold'), nextxpEl = el('nextxp');
+  const MAX_LEVEL = 50;
   const jobEl = el('job');
   const pnameEl = el('pname');
   const buffbarEl = el('buffbar');
@@ -592,69 +593,78 @@ Later patches (not in this edit):
   const ITEM_DB={
     potion_hp:{name:'Small Potion', type:'consumable', hp:50, price:10},
     potion_mp:{name:'Mana Drink', type:'consumable', mp:40, price:10},
-    wood_sword:{name:'Training Sword (1H)', type:'gear', slot:'weapon', wep:'sword1h', atk:6, price:60},
-    wood_2h_sword:{name:'Training Greatsword (2H)', type:'gear', slot:'weapon', wep:'sword2h', atk:10, aspd:1.12, price:90},
-    wood_shield:{name:'Training Shield', type:'gear', slot:'shield', def:6, price:50, socket:null},
-    wood_gun:{name:'Training Pistol', type:'gear', slot:'weapon', wep:'gun', atk:7, aspd:0.85, price:85},
-    wood_bow:{name:'Training Bow', type:'gear', slot:'weapon', wep:'bow', atk:5, price:70},
-    wood_katar:{name:'Training Katar', type:'gear', slot:'weapon', wep:'katar', atk:5, speed:20, aspd:0.8, price:70},
-    wood_staff:{name:'Training Staff', type:'gear', slot:'weapon', wep:'staff', atk:7, mpMax:10, price:80},
-    wood_wand:{name:'Training Wand', type:'gear', slot:'weapon', wep:'wand', atk:5, price:80},
-    leather_armor:{name:'Leather Armor', type:'gear', slot:'armor', hpMax:20, price:60},
-    runner_shoes:{name:'Runner Shoes', type:'gear', slot:'boots', speed:40, price:80},
-    feather_charm:{name:'Feather Charm', type:'gear', slot:'accessory', speed:30, price:90},
-    royal_core:{name:'Royal Core', type:'gear', slot:'accessory', atk:8, hpMax:30, price:0},
+    wood_sword:{name:'Training Sword (1H)', type:'gear', slot:'weapon', wep:'sword1h', atk:6, price:60, ilvl:1, reqLv:1},
+    wood_2h_sword:{name:'Training Greatsword (2H)', type:'gear', slot:'weapon', wep:'sword2h', atk:10, aspd:1.12, price:90, ilvl:2, reqLv:2},
+    wood_shield:{name:'Training Shield', type:'gear', slot:'shield', def:6, price:50, socket:null, ilvl:2, reqLv:2},
+    wood_gun:{name:'Training Pistol', type:'gear', slot:'weapon', wep:'gun', atk:7, aspd:0.85, price:85, ilvl:3, reqLv:3},
+    wood_bow:{name:'Training Bow', type:'gear', slot:'weapon', wep:'bow', atk:5, price:70, ilvl:1, reqLv:1},
+    wood_katar:{name:'Training Katar', type:'gear', slot:'weapon', wep:'katar', atk:5, speed:20, aspd:0.8, price:70, ilvl:2, reqLv:2},
+    wood_staff:{name:'Training Staff', type:'gear', slot:'weapon', wep:'staff', atk:7, mpMax:10, price:80, ilvl:2, reqLv:2},
+    wood_wand:{name:'Training Wand', type:'gear', slot:'weapon', wep:'wand', atk:5, price:80, ilvl:2, reqLv:2},
+    leather_armor:{name:'Leather Armor', type:'gear', slot:'armor', hpMax:20, price:60, ilvl:3, reqLv:3},
+    runner_shoes:{name:'Runner Shoes', type:'gear', slot:'boots', speed:40, price:80, ilvl:3, reqLv:3},
+    feather_charm:{name:'Feather Charm', type:'gear', slot:'accessory', speed:30, price:90, ilvl:4, reqLv:4},
+    royal_core:{name:'Royal Core', type:'gear', slot:'accessory', atk:8, hpMax:30, price:0, ilvl:5, reqLv:5},
     power_candy:{name:'Power Candy', type:'consumable', atk:4, dur:45, price:25},
     junon_scroll:{name:'Return Scroll: Junon Polis', type:'consumable', teleport:'junon', spawnTag:'gate', price:0},
     cart_pass:{name:'Cart License', type:'vehicle', vehicle:'cart', price:0},
-    // Mid-tier gear for Junon
-    bronze_sword:{name:'Bronze Sword', type:'gear', slot:'weapon', wep:'sword', atk:14, price:160},
-    iron_sword:{name:'Iron Sword', type:'gear', slot:'weapon', wep:'sword', atk:22, price:300},
-    oak_bow:{name:'Oak Bow', type:'gear', slot:'weapon', wep:'bow', atk:12, price:180},
-    composite_bow:{name:'Composite Bow', type:'gear', slot:'weapon', wep:'bow', atk:20, price:280},
-    fine_katar:{name:'Fine Katar', type:'gear', slot:'weapon', wep:'katar', atk:14, aspd:0.9, price:220},
-    battle_staff:{name:'Battle Staff', type:'gear', slot:'weapon', wep:'staff', atk:20, mpMax:20, price:260},
-    mystic_wand:{name:'Mystic Wand', type:'gear', slot:'weapon', wep:'wand', atk:18, price:260},
-    steel_armor:{name:'Steel Armor', type:'gear', slot:'armor', hpMax:80, price:240},
-    swift_boots:{name:'Swift Boots', type:'gear', slot:'boots', speed:80, price:220},
-    rocket_launcher:{name:'Rocket Launcher', type:'gear', slot:'weapon', wep:'launcher', atk:28, aspd:1.2, price:420},
+    // Mid-tier gear for Zant/Junon tiers
+    bronze_sword:{name:'Bronze Sword', type:'gear', slot:'weapon', wep:'sword', atk:14, price:160, ilvl:6, reqLv:6},
+    iron_sword:{name:'Iron Sword', type:'gear', slot:'weapon', wep:'sword', atk:22, price:300, ilvl:12, reqLv:12},
+    oak_bow:{name:'Oak Bow', type:'gear', slot:'weapon', wep:'bow', atk:12, price:180, ilvl:7, reqLv:7},
+    composite_bow:{name:'Composite Bow', type:'gear', slot:'weapon', wep:'bow', atk:20, price:280, ilvl:12, reqLv:12},
+    fine_katar:{name:'Fine Katar', type:'gear', slot:'weapon', wep:'katar', atk:14, aspd:0.9, price:220, ilvl:8, reqLv:8},
+    battle_staff:{name:'Battle Staff', type:'gear', slot:'weapon', wep:'staff', atk:20, mpMax:20, price:260, ilvl:12, reqLv:12},
+    mystic_wand:{name:'Mystic Wand', type:'gear', slot:'weapon', wep:'wand', atk:18, price:260, ilvl:11, reqLv:11},
+    steel_armor:{name:'Steel Armor', type:'gear', slot:'armor', hpMax:80, price:240, ilvl:9, reqLv:9},
+    swift_boots:{name:'Swift Boots', type:'gear', slot:'boots', speed:80, price:220, ilvl:8, reqLv:8},
+    rocket_launcher:{name:'Rocket Launcher', type:'gear', slot:'weapon', wep:'launcher', atk:28, aspd:1.2, price:420, ilvl:13, reqLv:13},
     // New slots
-    cap_basic:{name:'Basic Cap', type:'gear', slot:'helmet', def:4, price:90},
-    helmet_iron:{name:'Iron Helmet', type:'gear', slot:'helmet', def:12, hpMax:20, price:180},
-    helmet_knight:{name:'Knight Helm', type:'gear', slot:'helmet', def:22, hpMax:40, price:320},
-    cloak_travel:{name:'Traveler Cloak', type:'gear', slot:'wings', speed:40, style:'none', price:140},
-    cloak_royal:{name:'Royal Cape', type:'gear', slot:'wings', speed:80, hpMax:20, style:'none', price:260},
-    ring_bronze:{name:'Bronze Ring', type:'gear', slot:'accessory', atk:2, price:70},
-    ring_silver:{name:'Silver Ring', type:'gear', slot:'accessory', atk:4, price:140},
-    ring_gold:{name:'Golden Ring', type:'gear', slot:'accessory', atk:6, price:240},
+    cap_basic:{name:'Basic Cap', type:'gear', slot:'helmet', def:4, price:90, ilvl:2, reqLv:2},
+    helmet_iron:{name:'Iron Helmet', type:'gear', slot:'helmet', def:12, hpMax:20, price:180, ilvl:9, reqLv:9},
+    helmet_knight:{name:'Knight Helm', type:'gear', slot:'helmet', def:22, hpMax:40, price:320, ilvl:14, reqLv:14},
+    cloak_travel:{name:'Traveler Cloak', type:'gear', slot:'wings', speed:40, style:'none', price:140, ilvl:6, reqLv:6},
+    cloak_royal:{name:'Royal Cape', type:'gear', slot:'wings', speed:80, hpMax:20, style:'none', price:260, ilvl:12, reqLv:12},
+    ring_bronze:{name:'Bronze Ring', type:'gear', slot:'accessory', atk:2, price:70, ilvl:2, reqLv:2},
+    ring_silver:{name:'Silver Ring', type:'gear', slot:'accessory', atk:4, price:140, ilvl:7, reqLv:7},
+    ring_gold:{name:'Golden Ring', type:'gear', slot:'accessory', atk:6, price:240, ilvl:12, reqLv:12},
     // Wings gear (rebalance)
-    butterfly_wings:{name:'Butterfly Wings', type:'gear', slot:'wings', speed:80, style:'butterfly', price:0},
-    dragon_worm_wings:{name:'Dragon Worm Wings', type:'gear', slot:'wings', speed:160, hpMax:60, style:'angel', price:260},
-    angel_wings:{name:'Angel Wings', type:'gear', slot:'wings', speed:120, hpMax:40, style:'angel', price:220},
-    bat_wings:{name:'Bat Wings', type:'gear', slot:'wings', speed:100, style:'bat', price:180},
-    feather_wings:{name:'Feathered Wings', type:'gear', slot:'wings', speed:110, style:'feather', price:200},
-    mechanical_wings:{name:'Mechanical Wings', type:'gear', slot:'wings', speed:100, hpMax:20, style:'mechanical', price:240},
-    fairy_wings:{name:'Fairy Wings', type:'gear', slot:'wings', speed:90, style:'fairy', price:150},
+    butterfly_wings:{name:'Butterfly Wings', type:'gear', slot:'wings', speed:80, style:'butterfly', price:0, ilvl:1, reqLv:1},
+    dragon_worm_wings:{name:'Dragon Worm Wings', type:'gear', slot:'wings', speed:160, hpMax:60, style:'angel', price:260, ilvl:15, reqLv:15},
+    angel_wings:{name:'Angel Wings', type:'gear', slot:'wings', speed:120, hpMax:40, style:'angel', price:220, ilvl:12, reqLv:12},
+    bat_wings:{name:'Bat Wings', type:'gear', slot:'wings', speed:100, style:'bat', price:180, ilvl:8, reqLv:8},
+    feather_wings:{name:'Feathered Wings', type:'gear', slot:'wings', speed:110, style:'feather', price:200, ilvl:11, reqLv:11},
+    mechanical_wings:{name:'Mechanical Wings', type:'gear', slot:'wings', speed:100, hpMax:20, style:'mechanical', price:240, ilvl:12, reqLv:12},
+    fairy_wings:{name:'Fairy Wings', type:'gear', slot:'wings', speed:90, style:'fairy', price:150, ilvl:4, reqLv:4},
     // Extra travel scrolls
     zant_scroll:{name:'Return Scroll: Zant', type:'consumable', teleport:'zant', spawnTag:'plaza', price:0},
     elver_scroll:{name:'Return Scroll: El Verloon Desert', type:'consumable', teleport:'elverloon', spawnTag:'oasis', price:0}
   };
   // Gem items (slot: gem) — set all shop prices to 500 gold
   Object.assign(ITEM_DB, {
-    t7:{name:'T7 Gem', type:'gear', slot:'gem', bonus:{int:5}, price:500},
-    g7:{name:'G7 Gem', type:'gear', slot:'gem', bonus:{dex:5}, price:500},
-    r7:{name:'R7 Gem', type:'gear', slot:'gem', bonus:{str:5}, price:500},
-    s7:{name:'S7 Gem', type:'gear', slot:'gem', bonus:{con:5}, price:500},
-    emerald7:{name:'Emerald 7', type:'gear', slot:'gem', bonus:{sen:5}, price:500}
+    t7:{name:'T7 Gem', type:'gear', slot:'gem', bonus:{int:5}, price:500, ilvl:10},
+    g7:{name:'G7 Gem', type:'gear', slot:'gem', bonus:{dex:5}, price:500, ilvl:10},
+    r7:{name:'R7 Gem', type:'gear', slot:'gem', bonus:{str:5}, price:500, ilvl:10},
+    s7:{name:'S7 Gem', type:'gear', slot:'gem', bonus:{con:5}, price:500, ilvl:10},
+    emerald7:{name:'Emerald 7', type:'gear', slot:'gem', bonus:{sen:5}, price:500, ilvl:10}
   });
   const SHOP_STOCK_BASE=['potion_hp','potion_mp','wood_sword','wood_2h_sword','wood_shield','wood_bow','wood_katar','wood_staff','wood_wand','wood_gun','leather_armor','runner_shoes','feather_charm','power_candy','rocket_launcher','butterfly_wings','fairy_wings','cap_basic','ring_bronze','t7','g7','r7','s7','emerald7'];
   const SHOP_STOCK_MID=['potion_hp','potion_mp','bronze_sword','oak_bow','fine_katar','battle_staff','mystic_wand','steel_armor','swift_boots','power_candy','angel_wings','dragon_worm_wings','bat_wings','helmet_iron','ring_silver','cloak_travel','wood_gun'];
   const SHOP_STOCK_HIGH=['potion_hp','potion_mp','iron_sword','composite_bow','fine_katar','battle_staff','mystic_wand','steel_armor','swift_boots','power_candy','angel_wings','dragon_worm_wings','mechanical_wings','feather_wings','helmet_knight','ring_gold','cloak_royal','wood_2h_sword'];
+
+  // Map → allowed item-level range for shop/drops
+  const MAP_ITEM_LEVELS = { plains:[1,5], zant:[5,10], junon:[10,15] };
+  function itemAllowedInMap(it){
+    if(!it) return false;
+    if(it.type !== 'gear') return true; // consumables etc always allowed
+    const [lo,hi] = MAP_ITEM_LEVELS[mapName] || [1, MAX_LEVEL];
+    const lvl = (it.ilvl||it.reqLv||1)|0;
+    return lvl>=lo && lvl<=hi;
+  }
+
   function getShopStock(){
-    if(mapName==='junon'){
-      return player.level>=10? SHOP_STOCK_HIGH : SHOP_STOCK_MID;
-    }
-    return SHOP_STOCK_BASE;
+    const base = (mapName==='plains')? SHOP_STOCK_BASE : (mapName==='junon'? (player.level>=10? SHOP_STOCK_HIGH : SHOP_STOCK_MID) : SHOP_STOCK_MID);
+    return base.filter(id=> itemAllowedInMap(ITEM_DB[id]));
   }
   function getAllShopStock(){
     const set = new Set([...SHOP_STOCK_BASE, ...SHOP_STOCK_MID, ...SHOP_STOCK_HIGH]);
@@ -746,6 +756,12 @@ Later patches (not in this edit):
 
   function addToInv(itemId, qty=1){
     const it=ITEM_DB[itemId]; if(!it) return false;
+    // Prevent adding out-of-map gear via shop or rewards unless explicitly allowed
+    if(!itemAllowedInMap(it) && it.type==='gear'){
+      // As a safety, block adding gear that exceeds current map item level gate (drops are filtered earlier)
+      // Quests that intentionally reward higher gear should use consumables or teleport the player first
+      return false;
+    }
     if(it.type==='consumable'){
       const slot = player.inv.find(x=>x.id===itemId && x.stack!=null);
       if(slot){ slot.stack+=qty; } else { player.inv.push({id:itemId, stack:qty}); }
@@ -777,16 +793,25 @@ Later patches (not in this edit):
     renderInventory();
   }
 
+  // Enforce level requirement on equip
+  function canEquip(it){
+    if(!it || it.type!=='gear') return false;
+    const req = (it.reqLv||1)|0;
+    return (player.level|0) >= req;
+  }
+
   function equipItem(index){
     const entry=player.inv[index]; if(!entry) return; const it=ITEM_DB[entry.id]; if(!it||it.type!=='gear') return;
     if(it.slot==='gem'){ openSocketWindow(index); return; }
+    if(!canEquip(it)){ notify(`Requires Lv ${it.reqLv||1}`); return; }
     const slot=it.slot; const prev = player.eq[slot]; player.eq[slot]=entry.id; player.inv.splice(index,1); if(prev) player.inv.push({id:prev});
     notify('Equipped '+it.name); recalcStats(); save(); renderInventory();
   }
 
   function statsText(it){
     const prettyWep = it.wep==='sword1h'? 'SWORD (1H)' : it.wep==='sword2h'? 'SWORD (2H)' : (it.wep? it.wep.toUpperCase() : '');
-    const parts=[ prettyWep, it.atk?`ATK +${it.atk}`:'', it.hpMax?`HP +${it.hpMax}`:'', it.speed?`SPD +${it.speed}`:'', it.aspd?`ASPD x${it.aspd}`:'', it.mpMax?`MP +${it.mpMax}`:'', it.hp?`Heal ${it.hp}`:'', it.mp?`MP +${it.mp}`:'', it.dur?`${it.dur}s`:'', it.def?`DEF +${it.def}`:'' ];
+    const lvPart = (it.type==='gear')? `LVL ${it.ilvl||it.reqLv||1}${it.reqLv?` · REQ ${it.reqLv}`:''}` : '';
+    const parts=[ lvPart, prettyWep, it.atk?`ATK +${it.atk}`:'', it.hpMax?`HP +${it.hpMax}`:'', it.speed?`SPD +${it.speed}`:'', it.aspd?`ASPD x${it.aspd}`:'', it.mpMax?`MP +${it.mpMax}`:'', it.hp?`Heal ${it.hp}`:'', it.mp?`MP +${it.mp}`:'', it.dur?`${it.dur}s`:'', it.def?`DEF +${it.def}`:'' ];
     if(it.slot==='gem' && it.bonus){ const k=Object.keys(it.bonus)[0]; parts.push(`${k.toUpperCase()} +${it.bonus[k]}`); }
     return parts.filter(Boolean).join(' · ');
   }
@@ -816,7 +841,7 @@ Later patches (not in this edit):
   function openShop(all=false){ shopGold.textContent = player.gold|0; shopList.innerHTML=''; (all? getAllShopStock() : getShopStock()).forEach(id=>{
       const it=ITEM_DB[id]; const div=document.createElement('div'); div.className='item';
       const icon = getItemIconSVG(id);
-      div.innerHTML=`<div style=\"display:flex;align-items:center\"><span class=\"icon\">${icon}</span><div><b>${it.name}</b> <span class=\"pill\">${it.type}</span> <span class=\"pill\">${it.price}✦</span><div style=\"font-size:12px; opacity:.85; margin-top:4px\">${statsText(it)}</div></div></div>`;
+      div.innerHTML=`<div style=\"display:flex;align-items:center\"><span class=\"icon\">${icon}</span><div><b>${it.name}</b> <span class=\"pill\">${it.type}</span> <span class=\"pill\">${it.price}✦</span> ${(it.reqLv?`<span class=\"pill\">Req ${it.reqLv}</span>`:'')} ${(it.ilvl?`<span class=\"pill\">iLv ${it.ilvl}</span>`:'')}<div style=\"font-size:12px; opacity:.85; margin-top:4px\">${statsText(it)}</div>${(it.type==='gear' && !canEquip(it))? `<div style=\\"font-size:12px;color:#f88;margin-top:4px\\">Requires Lv ${it.reqLv||1}</div>`:''}</div></div>`;
       const actions=document.createElement('div'); const btn=document.createElement('button'); btn.textContent='Buy'; btn.onclick=()=>{ if(player.gold>=it.price){ player.gold-=it.price; addToInv(id,1); shopGold.textContent=player.gold|0; goldEl.textContent=player.gold|0; notify('Purchased '+it.name); } else notify('Not enough gold'); };
       actions.appendChild(btn); shopList.appendChild(div); shopList.appendChild(actions);
     }); shopWin.style.display='block'; shopList.scrollTop=0; ttsSay('Hello fellow rosarian, i have some items that may help ease your journey'); }
@@ -938,7 +963,7 @@ Later patches (not in this edit):
     const s = player.stats || (player.stats={str:0,dex:0,int:0,sen:0,con:0});
     statsList.innerHTML = '';
     const pts = player.statPoints|0;
-    const header=document.createElement('div'); header.className='item'; header.innerHTML = `<b>Points Available</b> <span class="pill">${pts}</span>`; statsList.appendChild(header); statsList.appendChild(document.createElement('div'));
+    const header=document.createElement('div'); header.className='item'; header.innerHTML = `<b>Points Available</b> <span class="pill">${pts}</span> <span class="pill">Lv ${player.level}/${MAX_LEVEL}</span>`; statsList.appendChild(header); statsList.appendChild(document.createElement('div'));
     const mkRow=(label,key,desc)=>{ const wrap=document.createElement('div'); wrap.className='item'; wrap.innerHTML=`<b>${label}</b> <span class=\"pill\">${s[key]}</span> <span class=\"pill\" style=\"opacity:.8\">${desc}</span>`; const actions=document.createElement('div'); const plus=document.createElement('button'); plus.textContent='+1'; plus.disabled = (player.statPoints|0) <= 0; plus.onclick=()=>{ if(player.statPoints>0){ s[key]++; player.statPoints--; recalcStats(); save(); openSkills(); } }; actions.appendChild(plus); statsList.appendChild(wrap); statsList.appendChild(actions); };
     mkRow('STR','str','Attack Power');
     mkRow('DEX','dex','Movement/Attack Speed');
@@ -1199,7 +1224,7 @@ Later patches (not in this edit):
   const cartQuest = {active:false, paid:false, fee:20, pumpkins:0, needPumpkins:10};
   player.flags = player.flags || {}; // holds cartUnlocked
 
-  function xpFor(level){ if(level>=10) return Infinity; return Math.floor(50 * Math.pow(level, 1.5)); }
+  function xpFor(level){ if(level>=MAX_LEVEL) return Infinity; return Math.floor(50 * Math.pow(level, 1.5)); }
 
   // Input
   const keys={};
@@ -1799,7 +1824,7 @@ function genLuxem(){
     while(player.xp >= xpFor(player.level)){
       const need = xpFor(player.level);
       player.xp -= need;
-      player.level++;
+      player.level = Math.min(MAX_LEVEL, player.level+1);
       player.baseAtk += 2;
       player.hpMax += 10;
       player.hp = player.hpMax;
@@ -1889,7 +1914,9 @@ function genLuxem(){
     }
     // Global rare gem drop ~1.5%
     if(Math.random()<0.015){ const gems=['t7','g7','r7','s7','emerald7']; rolls.push(gems[(Math.random()*gems.length)|0]); }
-    for(const id of rolls){ if(id==='potion_hp' || id==='potion_mp'){ drops.push({x:m.x+rand(-12,12), y:m.y+rand(-12,12), t:0, item:id, stack: (Math.random()<0.5?2:1)}); } else { drops.push({x:m.x+rand(-12,12), y:m.y+rand(-12,12), t:0, item:id}); } }
+    // Enforce map gating for gear drops
+    const filtered = rolls.filter(id=> itemAllowedInMap(ITEM_DB[id]));
+    for(const id of filtered){ if(id==='potion_hp' || id==='potion_mp'){ drops.push({x:m.x+rand(-12,12), y:m.y+rand(-12,12), t:0, item:id, stack: (Math.random()<0.5?2:1)}); } else { drops.push({x:m.x+rand(-12,12), y:m.y+rand(-12,12), t:0, item:id}); } }
   }
 
   // Buff Fairies — spawn around player every 5 levels
@@ -2103,7 +2130,7 @@ function genLuxem(){
     if(player.hp<0){ player.hp=player.hpMax; player.x=startPos.x; player.y=startPos.y; player.mounted=false; mountChip.style.display='none'; notify('You fainted...'); vibrate(40); }
 
     // HUD update
-    const nxf = xpFor(player.level); lvEl.textContent = player.level; goldEl.textContent = player.gold|0; shopGold.textContent = player.gold|0; jobEl.textContent=player.job;
+    const nxf = xpFor(player.level); lvEl.textContent = `${player.level}/${MAX_LEVEL}`; goldEl.textContent = player.gold|0; shopGold.textContent = player.gold|0; jobEl.textContent=player.job;
     hpEl.style.width = (100*player.hp/player.hpMax)+'%'; mpEl.style.width = (100*player.mp/player.mpMax)+'%'; xpEl.style.width = (100*Math.min(player.xp/nxf,1))+'%'; nextxpEl.textContent = isFinite(nxf)? nxf : '—'; mountChip.style.display = player.mounted? 'inline-block':'none';
     updateQuestText();
     // Party HUD re-render (lightweight)
