@@ -399,6 +399,78 @@ Later patches (not in this edit):
   const ccPreview = el('cc-preview');
   const toast = el('toast');
   const stick = el('stick'), knob = el('knob'), atkBtn = el('atk');
+  // Party & Friends UI containers
+  let partyHud = null, friendsWin = null, partyWin = null;
+
+  // Simple window dragging for all UI windows and panels
+  function makeDraggable(winEl, handleSelector='h2'){
+    if(!winEl) return;
+    const handle = handleSelector? winEl.querySelector(handleSelector) : winEl;
+    if(!handle) return;
+    handle.style.cursor = 'move';
+    let dragging=false, ox=0, oy=0, startLeft=0, startTop=0;
+    function onDown(e){
+      dragging=true; const rect=winEl.getBoundingClientRect();
+      startLeft = rect.left; startTop = rect.top;
+      ox = (e.touches? e.touches[0].clientX : e.clientX) - rect.left;
+      oy = (e.touches? e.touches[0].clientY : e.clientY) - rect.top;
+      // switch to left/top positioning
+      winEl.style.right=''; winEl.style.bottom='';
+      winEl.style.left = startLeft + 'px';
+      winEl.style.top  = startTop + 'px';
+      addEventListener('mousemove', onMove);
+      addEventListener('mouseup', onUp);
+      addEventListener('touchmove', onMove, {passive:false});
+      addEventListener('touchend', onUp, {passive:false});
+      e.preventDefault();
+    }
+    function onMove(e){ if(!dragging) return; const x=(e.touches? e.touches[0].clientX : e.clientX); const y=(e.touches? e.touches[0].clientY : e.clientY); winEl.style.left = Math.max(8, x-ox) + 'px'; winEl.style.top = Math.max(8, y-oy) + 'px'; if(e.cancelable) e.preventDefault(); }
+    function onUp(){ dragging=false; removeEventListener('mousemove', onMove); removeEventListener('mouseup', onUp); removeEventListener('touchmove', onMove); removeEventListener('touchend', onUp); }
+    handle.addEventListener('mousedown', onDown);
+    handle.addEventListener('touchstart', onDown, {passive:false});
+  }
+  // Apply to built-in windows
+  [invWin, shopWin, jobWin, statsWin, storageWin, charWin, document.querySelector('.quest')].forEach(w=> makeDraggable(w));
+
+  // Friends & Party minimal data
+  const SOCIAL_KEY='ap-social-v1';
+  let friends = [];
+  let party = { members: [] }; // each: {name, hp, hpMax}
+  function loadSocial(){ try{ const s=JSON.parse(localStorage.getItem(SOCIAL_KEY)||'{}'); friends = Array.isArray(s.friends)? s.friends:[]; party = s.party||{members:[]}; }catch(e){ friends=[]; party={members:[]}; } }
+  function saveSocial(){ try{ localStorage.setItem(SOCIAL_KEY, JSON.stringify({friends, party})); }catch(e){} }
+  loadSocial();
+
+  function openFriends(){
+    if(!friendsWin){ friendsWin=document.createElement('div'); friendsWin.className='window'; friendsWin.style.display='none'; friendsWin.innerHTML=`<button class="close">✕</button><h2>Friends</h2><div class="list" id="friendsList"></div><div class="row" style="margin-top:8px; gap:6px"><input id="friendName" placeholder="Add player name" style="all:unset;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);padding:8px 10px;border-radius:10px"/><button id="friendAdd">Add</button></div>`; document.getElementById('game-wrap').appendChild(friendsWin); friendsWin.querySelector('.close').onclick=()=>friendsWin.style.display='none'; makeDraggable(friendsWin); }
+    const list=friendsWin.querySelector('#friendsList'); list.innerHTML='';
+    friends.forEach((n,i)=>{ const div=document.createElement('div'); div.className='item'; div.innerHTML=`<b>${n}</b>`; const actions=document.createElement('div'); const rm=document.createElement('button'); rm.textContent='Remove'; rm.onclick=()=>{ friends.splice(i,1); saveSocial(); openFriends(); }; actions.appendChild(rm); list.appendChild(div); list.appendChild(actions); });
+    const addBtn=friendsWin.querySelector('#friendAdd'); const inp=friendsWin.querySelector('#friendName'); addBtn.onclick=()=>{ const v=(inp.value||'').trim(); if(v){ friends.push(v); inp.value=''; saveSocial(); openFriends(); }};
+    friendsWin.style.display='block';
+  }
+
+  function openParty(){
+    if(!partyWin){ partyWin=document.createElement('div'); partyWin.className='window'; partyWin.style.display='none'; partyWin.innerHTML=`<button class="close">✕</button><h2>Party</h2><div class="list" id="partyList"></div><div class="row" style="margin-top:8px; gap:6px"><input id="partyName" placeholder="Invite player name" style="all:unset;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);padding:8px 10px;border-radius:10px"/><button id="partyAdd">Invite</button><button id="partyLeave">Leave</button></div>`; document.getElementById('game-wrap').appendChild(partyWin); partyWin.querySelector('.close').onclick=()=>partyWin.style.display='none'; makeDraggable(partyWin); }
+    const list=partyWin.querySelector('#partyList'); list.innerHTML='';
+    const self = {name: player.name||'You', hp: player.hp|0, hpMax: player.hpMax|0};
+    const merged = [self, ...party.members.filter(m=>m.name!==self.name)];
+    merged.forEach((m,i)=>{ const div=document.createElement('div'); div.className='item'; const pct = Math.max(0, Math.min(1, (m.hp||0)/(m.hpMax||1))); div.innerHTML=`<b>${m.name}</b> <span class="pill">${(pct*100|0)}%</span>`; const actions=document.createElement('div'); if(i>0){ const rm=document.createElement('button'); rm.textContent='Kick'; rm.onclick=()=>{ party.members.splice(i-1,1); saveSocial(); openParty(); }; actions.appendChild(rm); } list.appendChild(div); list.appendChild(actions); });
+    const addBtn=partyWin.querySelector('#partyAdd'); const inp=partyWin.querySelector('#partyName'); const leaveBtn=partyWin.querySelector('#partyLeave');
+    addBtn.onclick=()=>{ const v=(inp.value||'').trim(); if(v){ party.members.push({name:v, hp:100, hpMax:100}); inp.value=''; saveSocial(); openParty(); }};
+    leaveBtn.onclick=()=>{ party.members.length=0; saveSocial(); openParty(); };
+    partyWin.style.display='block';
+  }
+
+  function ensurePartyHud(){
+    if(partyHud) return partyHud;
+    partyHud=document.createElement('div'); partyHud.style.position='absolute'; partyHud.style.right='12px'; partyHud.style.top='240px'; partyHud.style.background='var(--ui-bg)'; partyHud.style.padding='8px 10px'; partyHud.style.borderRadius='12px'; partyHud.style.border='1px solid rgba(255,255,255,.12)'; partyHud.style.font='12px system-ui'; partyHud.style.maxWidth='200px'; partyHud.style.pointerEvents='auto';
+    partyHud.innerHTML = `<div style="display:flex;gap:6px;align-items:center;justify-content:space-between"><b>Party</b><span><button id="p-open" style="font-size:12px">Manage</button></span></div><div id="p-list" style="margin-top:6px;display:grid;gap:6px"></div>`;
+    document.getElementById('game-wrap').appendChild(partyHud);
+    makeDraggable(partyHud, null);
+    partyHud.querySelector('#p-open').onclick = openParty;
+    return partyHud;
+  }
+
+  function renderPartyHud(){ ensurePartyHud(); const list=partyHud.querySelector('#p-list'); list.innerHTML=''; const self = {name: player.name||'You', hp: player.hp|0, hpMax: player.hpMax|0}; const merged=[self, ...party.members.filter(m=>m.name!==self.name)]; merged.forEach(m=>{ const row=document.createElement('div'); row.style.display='grid'; row.style.gridTemplateColumns='auto 1fr'; row.style.gap='8px'; const bar=`<div style="position:relative; height:6px; background:rgba(255,255,255,.08); border-radius:6px"><i style="position:absolute;left:0;top:0;bottom:0; width:${Math.max(0,Math.min(1,(m.hp||0)/(m.hpMax||1)))*100}% ; background:var(--hp); border-radius:6px"></i></div>`; row.innerHTML = `<span>👤 ${m.name}</span>${bar}`; list.appendChild(row); }); }
 
   const sicons=[el('sicon0'),el('sicon1'),el('sicon2'),el('sicon3')];
   const scds=[el('scd0'),el('scd1'),el('scd2'),el('scd3')];
@@ -623,7 +695,7 @@ Later patches (not in this edit):
     return {
       kind:'player', x:startPos.x, y:startPos.y, r:18, baseSpeed:150, speed:150, dir:0,
       hp:100, hpMax:100, mp:60, mpMax:60, level:1, xp:0, gold:0,
-      atk:12, baseAtk:12, atkCd:0.24, atkTimer:0, projSpeed:430, alive:true,
+      atk:12, baseAtk:12, atkCd:0.44, atkTimer:0, projSpeed:430, alive:true,
       inv:[], invCap:26, eq:{weapon:null, helmet:null, armor:null, boots:null, accessory:null, wings:null, shield:null},
       buffs:[], hasCartPass:false, mounted:false,
       job:'Visitor', skills:[null,null,null,null], skillCd:[0,0,0,0], flags:{cartUnlocked:false},
@@ -637,7 +709,7 @@ Later patches (not in this edit):
   let player = makePlayer();
 
   function recalcStats(){
-    let atk=player.baseAtk, hpMax=100, speed=player.baseSpeed, atkCd=0.34, mpMax=player.mpMax;
+    let atk=player.baseAtk, hpMax=100, speed=player.baseSpeed, atkCd=0.48, mpMax=player.mpMax;
     for(const k of ['weapon','helmet','armor','boots','accessory','wings','shield']){
       const itemId = player.eq[k]; if(!itemId) continue; const it=ITEM_DB[itemId];
       let mult = 1 + ((it.refine|0) * 0.06); // +6% stats per refine level
@@ -647,8 +719,8 @@ Later patches (not in this edit):
       if(it.def) player.defBase = (player.defBase|0) + Math.round(it.def * mult);
       if(it.aspd) atkCd *= Math.max(0.9, 1 - (1-it.aspd)*mult);
       if(it.mpMax) mpMax = (mpMax||player.mpMax) + Math.round(it.mpMax * mult);
-      // shield gem socket bonus
-      if(k==='shield' && it.socket && ITEM_DB[it.socket] && ITEM_DB[it.socket].bonus){ const g=ITEM_DB[it.socket].bonus; if(g.str) atk+=g.str; if(g.dex) speed+=g.dex*3; if(g.int) mpMax += g.int*2; if(g.con) player.defBase += g.con; }
+      // gem socket bonus (weapon/armor/wings/shield)
+      if(it.socket && ITEM_DB[it.socket] && ITEM_DB[it.socket].bonus){ const g=ITEM_DB[it.socket].bonus; if(g.str) atk+=g.str; if(g.dex) speed+=g.dex*3; if(g.int) mpMax = (mpMax||player.mpMax) + g.int*2; if(g.con) player.defBase += g.con; }
     }
     // Gem items exist but are not equippable by players
     // Derived defenses and rates
@@ -660,14 +732,14 @@ Later patches (not in this edit):
     speed += (s.dex||0) * 3.5;
     // DEX increases attack speed meaning lower cooldown
     const dex = (s.dex||0);
-    atkCd = Math.max(0.18, atkCd * (1 - Math.min(0.35, dex*0.02)));
+    atkCd = Math.max(0.24, atkCd * (1 - Math.min(0.28, dex*0.018)));
     acc += (s.con||0) * 0.015; // +1.5% per CON
     critAdd += (s.sen||0) * 0.01 * 0; // SEN handled in calcDamage baseline; additive bonus via buffs
     player.critBonus = critAdd;
     player.def = Math.max(0, def);
     player.mdef = Math.max(0, mdef);
     if(player.mounted){ speed += 120; }
-    player.atk = atk; player.hpMax = hpMax; player.speed = speed; player.atkCd = clamp(atkCd, 0.12, 0.7); player.mpMax = mpMax||player.mpMax; player.acc = clamp(acc, 0.05, 0.98);
+    player.atk = atk; player.hpMax = hpMax; player.speed = speed; player.atkCd = clamp(atkCd, 0.24, 0.9); player.mpMax = mpMax||player.mpMax; player.acc = clamp(acc, 0.05, 0.98);
     if(player.hp>player.hpMax) player.hp=player.hpMax;
     if(player.mp>player.mpMax) player.mp=player.mpMax;
   }
@@ -686,21 +758,18 @@ Later patches (not in this edit):
   function useItem(index){
     const entry=player.inv[index]; if(!entry) return; const it=ITEM_DB[entry.id];
     if(it.type==='consumable'){
+      // Reset stats scroll
+      if(entry.id==='reset_scroll'){
+        const spent = (player.stats.str|0)+(player.stats.dex|0)+(player.stats.int|0)+(player.stats.sen|0)+(player.stats.con|0);
+        player.statPoints = (player.statPoints|0) + spent; player.stats={str:0,dex:0,int:0,sen:0,con:0};
+        if(entry.stack){ entry.stack--; if(entry.stack<=0) player.inv.splice(index,1); } else player.inv.splice(index,1);
+        recalcStats(); save(); notify('Stats reset'); renderInventory(); return; }
       // Teleport scrolls (e.g., Return Scroll: Junon Polis)
-      if(it.teleport){
-        if(entry.stack){ entry.stack--; if(entry.stack<=0) player.inv.splice(index,1); }
-        else player.inv.splice(index,1);
-        const dest = it.teleport; const tag = it.spawnTag || 'main';
-        notify('Teleporting...');
-        changeMap(dest, tag);
-        saveMeta(); save();
-        return;
-      }
+      if(it.teleport){ if(entry.stack){ entry.stack--; if(entry.stack<=0) player.inv.splice(index,1); } else player.inv.splice(index,1); const dest = it.teleport; const tag = it.spawnTag || 'main'; notify('Teleporting...'); changeMap(dest, tag); saveMeta(); save(); return; }
       if(it.hp) player.hp = clamp(player.hp+it.hp, 0, player.hpMax);
       if(it.mp) player.mp = clamp(player.mp+it.mp, 0, player.mpMax);
       if(it.atk){ player.buffs.push({atk:it.atk, t:it.dur||30}); }
-      if(entry.stack){ entry.stack--; if(entry.stack<=0) player.inv.splice(index,1); }
-      else player.inv.splice(index,1);
+      if(entry.stack){ entry.stack--; if(entry.stack<=0) player.inv.splice(index,1); } else player.inv.splice(index,1);
       recalcStats(); save(); notify('Used '+it.name);
     } else if(it.type==='vehicle'){
       player.hasCartPass=true; player.flags.cartUnlocked=true; player.inv.splice(index,1); notify('Cart License acquired (press C to summon)'); save();
@@ -787,6 +856,19 @@ Later patches (not in this edit):
     });
   }
   function openStorage(){ storageWin.style.display='block'; renderStorage(); }
+
+  // Simple per-map quest giver interaction prompt when near Trainer (acts as quest giver)
+  function openMapBounties(){
+    if(mapName==='zant'){ qIndex = quests.findIndex(q=>q.id===10); if(qIndex<0){ quests.push({id:10, title:'Zant Bounty: Choropy', line:'Defeat 12 Choropys around Luxem and Zant outskirts.', need:12, type:'choropy', prog:0, done:false, reward:{xp:260,gold:240}}); qIndex = quests.length-1; }
+      notify('New bounty accepted: Choropy Hunt'); save(); }
+    else if(mapName==='junon'){ qIndex = quests.findIndex(q=>q.id===11); if(qIndex<0){ quests.push({id:11, title:'Junon Bounty: Moldy', line:'Defeat 10 Moldy Spores near the city.', need:10, type:'moldy', prog:0, done:false, reward:{xp:340,gold:300}}); qIndex = quests.length-1; }
+      notify('New bounty accepted: Moldy Spores'); save(); }
+    else if(mapName==='elverloon'){ qIndex = quests.findIndex(q=>q.id===12); if(qIndex<0){ quests.push({id:12, title:'El Verloon Bounty: Golems', line:'Defeat 6 Rock Golems in the dunes.', need:6, type:'rockgolem', prog:0, done:false, reward:{xp:520,gold:420}}); qIndex = quests.length-1; }
+      notify('New bounty accepted: Golems'); save(); }
+    else if(mapName==='luxem'){ qIndex = quests.findIndex(q=>q.id===10); if(qIndex<0){ quests.push({id:10, title:'Zant Bounty: Choropy', line:'Defeat 12 Choropys around Luxem and Zant outskirts.', need:12, type:'choropy', prog:0, done:false, reward:{xp:260,gold:240}}); qIndex = quests.length-1; }
+      notify('New bounty accepted: Choropy Hunt'); save(); }
+    updateQuestText();
+  }
 
   // Character window rendering
   function iconForEq(id){ return id? getItemIconSVG(id) : ''; }
@@ -893,6 +975,27 @@ Later patches (not in this edit):
     ]
   };
 
+  // QoL: Reset Stats item and handler
+  ITEM_DB.reset_scroll = { name:'Reset Scroll', type:'consumable', price: 60, desc:'Refunds all spent stat points' };
+  SHOP_STOCK_BASE.push('reset_scroll');
+  function useItem(index){
+    const entry=player.inv[index]; if(!entry) return; const it=ITEM_DB[entry.id]; if(!it) return;
+    if(it.type==='consumable'){
+      if(entry.id==='reset_scroll'){
+        const spent = (player.stats.str|0)+(player.stats.dex|0)+(player.stats.int|0)+(player.stats.sen|0)+(player.stats.con|0);
+        player.statPoints = (player.statPoints|0) + spent;
+        player.stats={str:0,dex:0,int:0,sen:0,con:0};
+        notify('Stats reset');
+      } else if(it.hp||it.mp){ if(it.hp) player.hp=Math.min(player.hpMax, player.hp+it.hp); if(it.mp) player.mp=Math.min(player.mpMax, player.mp+it.mp); }
+      if(entry.stack){ entry.stack--; if(entry.stack<=0) player.inv.splice(index,1); }
+      else player.inv.splice(index,1);
+      recalcStats(); save(); notify('Used '+it.name);
+    } else if(it.type==='vehicle'){
+      player.hasCartPass=true; player.flags.cartUnlocked=true; player.inv.splice(index,1); notify('Cart License acquired (press C to summon)'); save();
+    }
+    renderInventory();
+  }
+
   function setSkillsForJob(job){
     const defs=SKILL_DB[job]||SKILL_DB['Visitor'];
     for(let i=0;i<4;i++){ player.skills[i]=defs[i]||null; player.skillCd[i]=0; sicons[i].textContent = defs[i]? defs[i].icon:'—'; scds[i].style.display='none'; }
@@ -929,30 +1032,35 @@ Later patches (not in this edit):
     });
   }
 
-  // Socketing window for shield gems
+  // Socketing window for gems (weapon, armor, wings, shield)
   function openSocketWindow(invIndex){
     const entry = player.inv[invIndex]; if(!entry) return; const gem = ITEM_DB[entry.id]; if(!gem || gem.slot!=='gem') return;
-    const shieldId = player.eq.shield || (player.inv.find(e=> ITEM_DB[e.id]?.slot==='shield')?.id);
-    if(!shieldId){ notify('No shield available to socket.'); return; }
-    const shield = ITEM_DB[shieldId];
-    const win=document.createElement('div'); win.className='window'; win.style.display='block'; win.innerHTML=`<button class=\"close\">✕</button><h2>Socket Gem into Shield</h2><div class=\"list\" id=\"sockList\"></div>`; document.getElementById('game-wrap').appendChild(win);
+    const targets = [
+      {slot:'weapon', name:'Weapon', id: player.eq.weapon || (player.inv.find(e=> ITEM_DB[e.id]?.slot==='weapon')?.id)},
+      {slot:'armor',  name:'Armor',  id: player.eq.armor  || (player.inv.find(e=> ITEM_DB[e.id]?.slot==='armor')?.id)},
+      {slot:'wings',  name:'Wings',  id: player.eq.wings  || (player.inv.find(e=> ITEM_DB[e.id]?.slot==='wings')?.id)},
+      {slot:'shield', name:'Shield', id: player.eq.shield || (player.inv.find(e=> ITEM_DB[e.id]?.slot==='shield')?.id)}
+    ].filter(t=>t.id);
+    if(!targets.length){ notify('No gear to socket. Equip or carry gear first.'); return; }
+    const win=document.createElement('div'); win.className='window'; win.style.display='block'; win.innerHTML=`<button class=\"close\">✕</button><h2>Socket Gem</h2><div class=\"list\" id=\"sockList\"></div>`; document.getElementById('game-wrap').appendChild(win);
     const list = win.querySelector('#sockList'); const close = win.querySelector('.close'); close.onclick=()=>win.remove();
-    const div=document.createElement('div'); div.className='item';
-    const iconShield = getItemIconSVG(shieldId);
-    div.innerHTML = `<div style=\"display:flex;align-items:center\"><span class=\"icon\">${iconShield}</span><div><b>${shield.name}</b> <span class=\"pill\">Shield</span><div style=\"font-size:12px;opacity:.85;margin-top:4px\">Current Gem: ${shield.socket? ITEM_DB[shield.socket].name : 'None'}</div></div></div>`;
-    const actions=document.createElement('div'); const btn=document.createElement('button'); btn.textContent='Socket'; btn.onclick=()=>{
-      // consume 1 gem from inventory
-      if(player.eq.shield){ ITEM_DB[player.eq.shield].socket = entry.id; }
-      else {
-        const idx = player.inv.findIndex(e=> ITEM_DB[e.id]?.slot==='shield');
-        if(idx>=0){ player.eq.shield = player.inv[idx].id; player.inv.splice(idx,1); }
-        if(player.eq.shield) ITEM_DB[player.eq.shield].socket = entry.id;
-      }
-      if(entry.stack){ entry.stack--; if(entry.stack<=0) player.inv.splice(invIndex,1); }
-      else player.inv.splice(invIndex,1);
-      notify('Gem socketed into shield'); recalcStats(); save(); renderInventory(); win.remove();
-    };
-    actions.appendChild(btn); list.appendChild(div); list.appendChild(actions);
+    targets.forEach(t=>{
+      const it = ITEM_DB[t.id]; const div=document.createElement('div'); div.className='item';
+      const icon = getItemIconSVG(t.id);
+      div.innerHTML = `<div style=\"display:flex;align-items:center\"><span class=\"icon\">${icon}</span><div><b>${it.name}</b> <span class=\"pill\">${t.name}</span><div style=\"font-size:12px;opacity:.85;margin-top:4px\">Current Gem: ${it.socket? ITEM_DB[it.socket].name : 'None'}</div></div></div>`;
+      const actions=document.createElement('div'); const btn=document.createElement('button'); btn.textContent='Socket'; btn.onclick=()=>{
+        // Ensure equipped; if not, auto-equip from inventory
+        if(!player.eq[t.slot]){
+          const idx = player.inv.findIndex(e=> ITEM_DB[e.id]?.slot===t.slot);
+          if(idx>=0){ player.eq[t.slot] = player.inv[idx].id; player.inv.splice(idx,1); }
+        }
+        if(player.eq[t.slot]) ITEM_DB[player.eq[t.slot]].socket = entry.id;
+        if(entry.stack){ entry.stack--; if(entry.stack<=0) player.inv.splice(invIndex,1); }
+        else player.inv.splice(invIndex,1);
+        notify(`Gem socketed into ${t.name}`); recalcStats(); save(); renderInventory(); win.remove();
+      };
+      actions.appendChild(btn); list.appendChild(div); list.appendChild(actions);
+    });
   }
 
   function tryUseSkill(slot){
@@ -1003,16 +1111,19 @@ Later patches (not in this edit):
     return Math.random() < chance;
   }
   function showMiss(x,y){ fx.push({t:0.8, kind:'miss', x, y}); }
-  function showDamage(x,y,amount,isCrit){ fx.push({t:1.1, kind:'dmg', x, y, val:amount, crit:isCrit}); }
+  function showDamage(x,y,amount,isCrit, dtype){ fx.push({t:1.1, kind:'dmg', x, y, val:amount, crit:isCrit, dtype}); fx.push({t:0.18, kind:'hit', x, y}); Sfx.play('hit'); }
 
   // Skill helpers
   function dash(len){ const a=player.dir; player.x+=Math.cos(a)*len; player.y+=Math.sin(a)*len; fx.push({t:0.3, kind:'dash', x:player.x, y:player.y}); }
-  function arcStrike(radius, mult=1.0, swings=1){
-    const base = player.atk*mult; const a0=player.dir; for(let k=0;k<swings;k++){
+  function arcStrike(radius, mult=1.0, swings=1, step=0){
+    const base = player.atk*mult; const a0=getAimDir(); for(let k=0;k<swings;k++){
       setTimeout(()=>{
-        for(const m of ents){ if(!m.alive) continue; const a=Math.atan2(m.y-player.y,m.x-player.x); let da=Math.atan2(Math.sin(a-a0),Math.cos(a-a0)); if(Math.abs(da)<0.9 && dist(player.x,player.y,m.x,m.y)<radius){ if(rollHitAgainst(m)){ const out=calcDamage(base,'physical'); m.hp-=out.dmg; showDamage(m.x,m.y,out.dmg,out.crit); m.hurt=0.12; if(m.hp<=0){ m.alive=false; onMobKilled(m);} } else { showMiss(m.x,m.y); } }
+        // slight lunge forward for tactile melee
+        if(step>0){ const nx = player.x + Math.cos(a0)*step; const ny = player.y + Math.sin(a0)*step; if(!blocked(nx, player.y)) player.x = nx; if(!blocked(player.x, ny)) player.y = ny; }
+        for(const m of ents){ if(!m.alive) continue; const a=Math.atan2(m.y-player.y,m.x-player.x); let da=Math.atan2(Math.sin(a-a0),Math.cos(a-a0)); const extra = Math.min(14, (m.r||18)*0.6); if(Math.abs(da)<1.0 && dist(player.x,player.y,m.x,m.y)<(radius+extra)){ if(rollHitAgainst(m)){ const out=calcDamage(base,'physical'); m.hp-=out.dmg; showDamage(m.x,m.y,out.dmg,out.crit,'physical'); m.hurt=0.12; if(m.hp<=0){ m.alive=false; onMobKilled(m);} } else { showMiss(m.x,m.y); } }
         }
         fx.push({t:0.18, kind:'arc', x:player.x, y:player.y, a:a0, r:radius});
+        fx.push({t:0.22, kind:'slash', x:player.x, y:player.y, a:a0, r:radius});
         player.swingT = 0.3;
       }, k*90);
     }
@@ -1040,7 +1151,7 @@ Later patches (not in this edit):
   // Enemies
   function spawnMob(type,x,y){
     type = normalizeType(type);
-    const base = {kind:'mob', type, x, y, r:18, speed:90, hp:40, hpMax:40, atk:8, alive:true, hurt:0, aggro:0};
+    const base = {kind:'mob', type, x, y, r:18, speed:90, hp:40, hpMax:40, atk:8, alive:true, hurt:0, aggro:0, mcd:0};
     if(type==='jelly'){ Object.assign(base,{r:19,speed:90,hp:35,hpMax:35,atk:6}); }
     if(type==='pumpkin'){ Object.assign(base,{r:19,speed:70,hp:70,hpMax:70,atk:10}); }
     if(type==='flanae'){ Object.assign(base,{r:18,speed:120,hp:45,hpMax:45,atk:8, flyer:true}); }
@@ -1073,10 +1184,14 @@ Later patches (not in this edit):
   // Quests
   const quests=[
     {id:0, title:'Meet the Plains', line:'Welcome! Interact with the wooden signpost.', need:0, type:'talk', done:false, reward:{xp:30,gold:40, items:[['potion_hp',2]]}},
-    {id:1, title:'Jelly Cleanup', line:'Defeat 10 Jelly Blobs', need:10, type:'jelly', prog:0, done:false, reward:{xp:80,gold:100, items:[['wood_sword',1]]}},
-    {id:2, title:'Pumpkin Patrol', line:'Defeat 5 Pumpkinlings', need:5, type:'pumpkin', prog:0, done:false, reward:{xp:150,gold:150, items:[['wood_bow',1]]}},
+    {id:1, title:'Jelly Cleanup', line:'Defeat 10 Jelly Blobs', need:10, type:'jelly', prog:0, done:false, reward:{xp:90,gold:120, items:[['potion_hp',2]]}},
+    {id:2, title:'Pumpkin Patrol', line:'Defeat 6 Pumpkinlings', need:6, type:'pumpkin', prog:0, done:false, reward:{xp:160,gold:160, items:[['potion_mp',2]]}},
     {id:3, title:'Cart License', line:'Talk to the Cart Master (🛞). Complete his task to earn your license.', need:1, type:'cartquest', prog:0, done:false, reward:{xp:100,gold:80, items:[['cart_pass',1]]}},
-    {id:4, title:'Plains Protector', line:'Reach Level 10 then pick a Job with the Trainer (★).', need:10, type:'level', done:false, reward:{xp:200,gold:220, items:[['wood_staff',1],['wood_katar',1],['wood_wand',1]]}}
+    {id:4, title:'Plains Protector', line:'Reach Level 10 then pick a Job with the Trainer (★).', need:10, type:'level', done:false, reward:{xp:240,gold:240, items:[['wood_staff',1],['wood_katar',1],['wood_wand',1]]}},
+    // Map bounty quests (repeatable light bounties)
+    {id:10, title:'Zant Bounty: Choropy', line:'Defeat 12 Choropys around Luxem and Zant outskirts.', need:12, type:'choropy', prog:0, done:false, reward:{xp:260,gold:240}},
+    {id:11, title:'Junon Bounty: Moldy', line:'Defeat 10 Moldy Spores near the city.', need:10, type:'moldy', prog:0, done:false, reward:{xp:340,gold:300}},
+    {id:12, title:'El Verloon Bounty: Golems', line:'Defeat 6 Rock Golems in the dunes.', need:6, type:'rockgolem', prog:0, done:false, reward:{xp:520,gold:420}}
   ];
   let qIndex=0;
 
@@ -1094,6 +1209,8 @@ Later patches (not in this edit):
     if(e.altKey && (e.key==='L' || k==='l')){ if(storageWin.style.display==='block'){ storageWin.style.display='none'; } else { openStorage(); } }
     if(e.altKey && (e.key==='J' || k==='j')){ openJobGuide(); }
     if(e.altKey && (e.key==='C' || k==='c')){ if(charWin && charWin.style.display==='block'){ closeCharacter(); } else { openCharacter(); } }
+    if(e.altKey && (e.key==='P' || k==='p')){ openParty(); }
+    if(e.altKey && (e.key==='F' || k==='f')){ openFriends(); }
     if(e.altKey && (e.key==='T' || k==='t')){ TTS_ENABLED=!TTS_ENABLED; saveTTS(); notify('TTS '+(TTS_ENABLED?'ON':'OFF')); }
     if(k==='i'){ openInventory(); }
     if(k==='m'){ if(nearest(merchant) < TILE*1.8) openShop(); else notify('Find the Merchant (🛒)'); }
@@ -1341,7 +1458,8 @@ Later patches (not in this edit):
     plains: { label:'Adventure Plains', gen: genPlains,  spawn:{main:{x: TILE*4, y: TILE*6}} },
     junon:  { label:'Junon Polis',      gen: genJunon,   spawn:{dock:{x: TILE*44, y: TILE*58}, gate:{x:TILE*20, y:TILE*28}} },
     zant:   { label:'Zant',             gen: genZant,    spawn:{plaza:{x:TILE*24, y:TILE*18}, gate:{x:TILE*10, y:TILE*34}} },
-    elverloon:{ label:'El Verloon Desert', gen: genElVerloon, spawn:{oasis:{x:TILE*54, y:TILE*24}, dune:{x:TILE*18, y:TILE*48}} }
+    elverloon:{ label:'El Verloon Desert', gen: genElVerloon, spawn:{oasis:{x:TILE*54, y:TILE*24}, dune:{x:TILE*18, y:TILE*48}} },
+    luxem: { label:'Luxem Forest', gen: genLuxem, spawn:{grove:{x:TILE*28,y:TILE*22}, path:{x:TILE*10,y:TILE*36}} }
   };
 
   function saveMeta(){ try{ localStorage.setItem('ap-meta', JSON.stringify({mapName})); }catch(e){} }
@@ -1488,7 +1606,9 @@ Later patches (not in this edit):
     spawnOut('moldy',60); spawnOut('moldy_elite',20); spawnOut('rockgolem',8);
     // Portal to El Verloon
     portals.length = 0;
-    portals.push({kind:'npc', npc:'portal', x:(cx+cw+1)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'elverloon', tag:'oasis'});
+  portals.push({kind:'npc', npc:'portal', x:(cx+cw+1)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'elverloon', tag:'oasis'});
+  // Junon → Luxem Forest
+  portals.push({kind:'npc', npc:'portal', x:(cx-2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'luxem', tag:'grove'});
   }
 
   // Zant — compact village with low-mid mobs nearby
@@ -1513,7 +1633,9 @@ Later patches (not in this edit):
     // portals: Zant → Plains, Zant → Junon
     portals.length=0;
     portals.push({kind:'npc', npc:'portal', x:(cx-2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'plains', tag:'main'});
-    portals.push({kind:'npc', npc:'portal', x:(cx+cw+2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'junon', tag:'gate'});
+  portals.push({kind:'npc', npc:'portal', x:(cx+cw+2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'junon', tag:'gate'});
+  // Zant → Luxem Forest (alt path)
+  portals.push({kind:'npc', npc:'portal', x:(cx+Math.floor(cw/2))*TILE, y:(cy-2)*TILE, r:22, dest:'luxem', tag:'path'});
   }
 
   // El Verloon Desert — sandy open area with tougher mobs
@@ -1532,7 +1654,35 @@ Later patches (not in this edit):
     const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1600){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0||tt===1){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
     spawnOut('woopie',50); spawnOut('moldy_elite',18); spawnOut('rockgolem',10);
     portals.length=0; portals.push({kind:'npc', npc:'portal', x:TILE*18, y:TILE*48, r:22, dest:'junon', tag:'gate'});
+  // El Verloon → Luxem Forest secret portal
+  portals.push({kind:'npc', npc:'portal', x:TILE*56, y:TILE*22, r:22, dest:'luxem', tag:'grove'});
   }
+
+// Luxem Forest — dense trees, mid mobs
+function genLuxem(){
+  for(let i=0;i<MAP_W*MAP_H;i++) tiles[i]=0;
+  // Dense forest patches
+  decor.length=0;
+  for(let y=0;y<MAP_H;y++){
+    for(let x=0;x<MAP_W;x++){
+      if(Math.random()>0.94) decor.push({t:'tree', x:x*TILE+8+Math.random()*(TILE-16), y:y*TILE+8+Math.random()*(TILE-16)});
+      if(Math.random()>0.985) decor.push({t:'flower', x:x*TILE+10+Math.random()*(TILE-20), y:y*TILE+10+Math.random()*(TILE-20)});
+    }
+  }
+  // Creek
+  for(let y=10;y<MAP_H-10;y++) for(let x=24;x<27;x++) tiles[y*MAP_W+x]=2;
+  // NPC cluster at grove
+  const gx = 28, gy = 22; sign.x = gx*TILE; sign.y = (gy-2)*TILE; merchant.x = (gx+2)*TILE; merchant.y = gy*TILE; trainer.x = (gx-2)*TILE; trainer.y = gy*TILE; storageNPC.x = gx*TILE; storageNPC.y = (gy+2)*TILE;
+  townZones.length=0; townZones.push({type:'circle', x:gx*TILE, y:gy*TILE, r:TILE*6});
+  el('zone').textContent = MAPS.luxem.label;
+  // Spawns: choropy/woopie mix
+  const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1400){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
+  spawnOut('choropy',36); spawnOut('woopie',28);
+  portals.length=0;
+  // Luxem exits back
+  portals.push({kind:'npc', npc:'portal', x:(gx-6)*TILE, y:gy*TILE, r:22, dest:'zant', tag:'plaza'});
+  portals.push({kind:'npc', npc:'portal', x:(gx+6)*TILE, y:gy*TILE, r:22, dest:'junon', tag:'gate'});
+}
 
   // Cart summon
   let summonedCart=null;
@@ -1569,14 +1719,20 @@ Later patches (not in this edit):
 
   // Minimal sound engine (Sfx) — lightweight ROSE-like cues
   const Sfx=(function(){
-    const ctx = (window.AudioContext||window.webkitAudioContext)? new (window.AudioContext||window.webkitAudioContext)() : null;
-    function beep(freq=440, dur=0.05, type='sine', gain=0.06){ if(!ctx) return; const t=ctx.currentTime; const o=ctx.createOscillator(); const g=ctx.createGain(); o.type=type; o.frequency.value=freq; g.gain.value=gain; o.connect(g).connect(ctx.destination); o.start(t); o.stop(t+dur); }
+    const Ctx = (window.AudioContext||window.webkitAudioContext);
+    const ctx = Ctx? new Ctx() : null;
+    function playHit(freq=340, dur=0.06){ if(!ctx) return; const t=ctx.currentTime; const o=ctx.createOscillator(); const g=ctx.createGain(); const filt=ctx.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=1200; o.type='triangle'; o.frequency.value=freq; g.gain.setValueAtTime(0.08,t); g.gain.exponentialRampToValueAtTime(0.001, t+dur); o.connect(filt).connect(g).connect(ctx.destination); o.start(t); o.stop(t+dur); }
+    function playBow(){ if(!ctx) return; const t=ctx.currentTime; const n=ctx.createNoise? ctx.createNoise() : null; const o=ctx.createOscillator(); const g=ctx.createGain(); o.type='sawtooth'; o.frequency.value=120; g.gain.setValueAtTime(0.04,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.08); o.connect(g).connect(ctx.destination); o.start(t); o.stop(t+0.08); }
+    function playCast(){ if(!ctx) return; const t=ctx.currentTime; const o=ctx.createOscillator(); const g=ctx.createGain(); o.type='sine'; o.frequency.setValueAtTime(900,t); o.frequency.exponentialRampToValueAtTime(400,t+0.14); g.gain.setValueAtTime(0.06,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.14); o.connect(g).connect(ctx.destination); o.start(t); o.stop(t+0.14); }
+    function playGun(){ if(!ctx) return; const t=ctx.currentTime; const o=ctx.createOscillator(); const g=ctx.createGain(); const f=ctx.createBiquadFilter(); f.type='highpass'; f.frequency.value=500; o.type='square'; o.frequency.value=220; g.gain.setValueAtTime(0.07,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.06); o.connect(f).connect(g).connect(ctx.destination); o.start(t); o.stop(t+0.06); }
+    function playGold(){ if(!ctx) return; const t=ctx.currentTime; const o=ctx.createOscillator(); const g=ctx.createGain(); o.type='triangle'; o.frequency.value=880; g.gain.setValueAtTime(0.05,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.12); o.connect(g).connect(ctx.destination); o.start(t); o.stop(t+0.12); }
     function play(name){
-      if(name==='slash') beep(320,0.06,'square',0.05);
-      else if(name==='bow') beep(540,0.04,'triangle',0.04);
-      else if(name==='cast') beep(760,0.08,'sine',0.05);
-      else if(name==='gun') { beep(180,0.03,'square',0.06); setTimeout(()=>beep(1200,0.02,'sawtooth',0.03), 10); }
-      else if(name==='gold') beep(900,0.08,'triangle',0.05);
+      if(name==='slash') playHit(300,0.07);
+      else if(name==='bow') playBow();
+      else if(name==='cast') playCast();
+      else if(name==='gun') playGun();
+      else if(name==='gold') playGold();
+      else if(name==='hit') playHit(360,0.05);
     }
     return { play };
   })();
@@ -1624,13 +1780,13 @@ Later patches (not in this edit):
   function primaryAttack(){
     const wep = getEquippedWeaponType();
     player.atkTimer = player.atkCd;
-    if(wep === 'sword'){ arcStrike(62, 1.05); vibrate(8); Sfx.play('slash'); return; }
-    if(wep === 'katar'){ const oldCd = player.atkCd; player.atkTimer = Math.max(0.12, oldCd * 0.55); arcStrike(42, 0.55, 2); vibrate(6); return; }
+    if(wep === 'sword'){ arcStrike(70, 1.05, 1, 10); vibrate(8); Sfx.play('slash'); return; }
+    if(wep === 'katar'){ arcStrike(56, 0.55, 2, 10); vibrate(6); return; }
     if(wep === 'launcher'){ const ang = getAimDir(); shoot(player.x, player.y, ang, player.atk*1.05+4, 240, 'player', 'rocket'); return; }
     if(wep === 'bow'){ const spread = mouse.down ? (Math.random()*0.02 - 0.01) : 0; const ang = getAimDir() + spread; shoot(player.x, player.y, ang, player.atk*0.95, player.projSpeed+90, 'player', 'arrow'); Sfx.play('bow'); return; }
     if(wep === 'gun'){ const spread = (Math.random()*0.04 - 0.02); const ang = getAimDir() + spread; shoot(player.x, player.y, ang, player.atk*0.9, player.projSpeed+110, 'player', 'bullet'); Sfx.play('gun'); return; }
     if(wep === 'staff'){ shoot(player.x, player.y, getAimDir(), player.atk*1.15+6, player.projSpeed+10, 'player', 'fire'); player.mp = clamp(player.mp-4, 0, player.mpMax); Sfx.play('cast'); return; }
-    if(wep === 'wand'){ const oldCd = player.atkCd; player.atkTimer = Math.max(0.14, oldCd * 0.8); shoot(player.x, player.y, getAimDir(), player.atk*0.95+8, player.projSpeed+24, 'player', 'magic'); Sfx.play('cast'); return; }
+    if(wep === 'wand'){ shoot(player.x, player.y, getAimDir(), player.atk*0.95+8, player.projSpeed+24, 'player', 'magic'); Sfx.play('cast'); return; }
     // fists if no weapon
     if(wep === 'fist'){ arcStrike(38, 0.45, 2); vibrate(4); return; }
     // fallback (should not happen)
@@ -1731,8 +1887,8 @@ Later patches (not in this edit):
       if(Math.random()<0.05) rolls.push('angel_wings');
       if(Math.random()<0.04) rolls.push('ring_bronze');
     }
-    // Global rare gem drop ~5%
-    if(Math.random()<0.05){ const gems=['t7','g7','r7','s7','emerald7']; rolls.push(gems[(Math.random()*gems.length)|0]); }
+    // Global rare gem drop ~1.5%
+    if(Math.random()<0.015){ const gems=['t7','g7','r7','s7','emerald7']; rolls.push(gems[(Math.random()*gems.length)|0]); }
     for(const id of rolls){ if(id==='potion_hp' || id==='potion_mp'){ drops.push({x:m.x+rand(-12,12), y:m.y+rand(-12,12), t:0, item:id, stack: (Math.random()<0.5?2:1)}); } else { drops.push({x:m.x+rand(-12,12), y:m.y+rand(-12,12), t:0, item:id}); } }
   }
 
@@ -1884,6 +2040,8 @@ Later patches (not in this edit):
       if(nearest(sign)<TILE*1.2){ interactSign(); keys['e']=false; }
       else if(nearest(merchant)<TILE*1.8){ openShop(); keys['e']=false; }
       else if(nearest(trainer)<TILE*1.8){ openJobs(); keys['e']=false; }
+      // Map quest giver: press E near sign in non-plains maps to grab bounty
+      else if(nearest(sign)<TILE*1.8 && mapName!=='plains'){ openMapBounties(); keys['e']=false; }
       else if(nearest(storageNPC)<TILE*1.8){ openStorage(); keys['e']=false; }
       else if(nearest(cartMaster)<TILE*1.8){ interactCartMaster(); keys['e']=false; }
       else if(summonedCart && nearest(summonedCart)<TILE*1.8){ mountCart(); keys['e']=false; }
@@ -1896,11 +2054,11 @@ Later patches (not in this edit):
     }
 
     // Projectiles & turrets
-  for(let i=projs.length-1;i>=0;i--){ const p=projs[i]; p.x+=p.vx*dt; p.y+=p.vy*dt; p.ttl-=dt; if(p.gravity) p.vy+=p.gravity*dt; if(p.ttl<=0){ const px=p.x,py=p.y; if(p.onExpire) p.onExpire(px,py); projs.splice(i,1); continue; } if(p.owner==='player'){ for(let j=ents.length-1;j>=0;j--){ const m=ents[j]; if(!m.alive) continue; if(dist(p.x,p.y,m.x,m.y)<m.r+6){ if(p.accRoll? rollHitAgainst(m) : true){ m.hp -= p.dmg; if(p.crit) showDamage(m.x,m.y,p.dmg,true); else showDamage(m.x,m.y,p.dmg,false); m.hurt=0.15; } else { showMiss(m.x,m.y); } projs.splice(i,1); if(m.hp<=0){ m.alive=false; onMobKilled(m); ents.splice(j,1);} break; }} } else { if(dist(p.x,p.y,player.x,player.y)<player.r+6){ dmgPlayer(p.dmg); projs.splice(i,1); } } }
+  for(let i=projs.length-1;i>=0;i--){ const p=projs[i]; p.x+=p.vx*dt; p.y+=p.vy*dt; p.ttl-=dt; if(p.gravity) p.vy+=p.gravity*dt; if(p.ttl<=0){ const px=p.x,py=p.y; if(p.onExpire) p.onExpire(px,py); projs.splice(i,1); continue; } if(p.owner==='player'){ for(let j=ents.length-1;j>=0;j--){ const m=ents[j]; if(!m.alive) continue; if(dist(p.x,p.y,m.x,m.y)<m.r+6){ if(p.accRoll? rollHitAgainst(m) : true){ m.hp -= p.dmg; const dtype = (p.kind==='magic'||p.kind==='fire')? (p.kind) : 'physical'; showDamage(m.x,m.y,p.dmg,!!p.crit, dtype); m.hurt=0.15; } else { showMiss(m.x,m.y); } projs.splice(i,1); if(m.hp<=0){ m.alive=false; onMobKilled(m); ents.splice(j,1);} break; }} } else { if(dist(p.x,p.y,player.x,player.y)<player.r+6){ const kind = p.kind==='magic'? 'magic' : 'physical'; dmgPlayer(p.dmg, kind); projs.splice(i,1); } } }
     for(let i=turrets.length-1;i>=0;i--){ const t=turrets[i]; t.t-=dt; if(t.t<=0){ turrets.splice(i,1); continue; } if(Math.random()<0.06){ const m=ents.find(m=>m.alive && dist(t.x,t.y,m.x,m.y)<250); if(m){ const a=Math.atan2(m.y-t.y,m.x-t.x); shoot(t.x,t.y,a,player.atk*0.6,360,'player'); } } }
 
     // Mobs AI
-    for(const m of ents){
+  for(const m of ents){
       if(!m.alive) continue;
       // Keep mobs out of town zones
       if(isInTown(m.x, m.y)) { pushOutOfTown(m); m.aggro=0; }
@@ -1914,11 +2072,20 @@ Later patches (not in this edit):
         if(d<m.r+player.r+2 && !isInTown(player.x, player.y)){
           dmgPlayer( (m.type==='jelly'? 5 : m.type==='flanae'? 7 : 8)*dt );
         }
-        if(m.type==='pumpkin' && Math.random()<0.008 && !isInTown(player.x, player.y)){
-          const a=Math.atan2(player.y-m.y,player.x-m.x); shoot(m.x,m.y,a,8,220,'mob');
+        // All mobs can attempt a basic magic bolt at range; bosses/ranged also keep their shots
+        m.mcd = Math.max(0, (m.mcd||0) - dt);
+        const wantRange = d>140 && d<520 && !isInTown(player.x, player.y);
+        if(wantRange && m.mcd===0){
+          const a2=Math.atan2(player.y-m.y,player.x-m.x);
+          const dmg = (m.boss? 14 : 8);
+          shoot(m.x,m.y,a2,dmg, (m.boss? 280:240), 'mob', 'magic');
+          m.mcd = m.boss? 1.4 : 2.0;
+        }
+        if(m.type==='pumpkin' && Math.random()<0.006 && !isInTown(player.x, player.y)){
+          const a3=Math.atan2(player.y-m.y,player.x-m.x); shoot(m.x,m.y,a3,8,220,'mob');
         }
         if(m.type==='jellyking' && Math.random()<0.006 && !isInTown(player.x, player.y)){
-          const a=Math.atan2(player.y-m.y,player.x-m.x); shoot(m.x,m.y,a,14,260,'mob');
+          const a4=Math.atan2(player.y-m.y,player.x-m.x); shoot(m.x,m.y,a4,14,260,'mob');
         }
       } else {
         m.x += (r()-0.5)*20*dt; m.y += (r()-0.5)*20*dt;
@@ -1939,6 +2106,8 @@ Later patches (not in this edit):
     const nxf = xpFor(player.level); lvEl.textContent = player.level; goldEl.textContent = player.gold|0; shopGold.textContent = player.gold|0; jobEl.textContent=player.job;
     hpEl.style.width = (100*player.hp/player.hpMax)+'%'; mpEl.style.width = (100*player.mp/player.mpMax)+'%'; xpEl.style.width = (100*Math.min(player.xp/nxf,1))+'%'; nextxpEl.textContent = isFinite(nxf)? nxf : '—'; mountChip.style.display = player.mounted? 'inline-block':'none';
     updateQuestText();
+    // Party HUD re-render (lightweight)
+    renderPartyHud();
   }
 
   // ==== SECTION: DRAW PIPELINE via Renderer ====
@@ -1954,6 +2123,22 @@ Later patches (not in this edit):
     Renderer.draw.drawOverlay();
     Renderer.endFrame();
     // HUD dynamic elements
+    // Visual aim indicator
+    try{
+      const aim = getAimDir();
+      const s = worldToScreen(player.x, player.y);
+      const r1 = 18, r2 = 72;
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(aim);
+      ctx.globalAlpha = 0.55;
+      ctx.strokeStyle = 'rgba(200,240,255,0.8)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(r1, 0); ctx.lineTo(r2, 0); ctx.stroke();
+      ctx.globalAlpha = 0.35;
+      ctx.beginPath(); ctx.arc(0,0, r1, -0.2, 0.2); ctx.stroke();
+      ctx.restore();
+    }catch(e){}
     // Name
     if(pnameEl) pnameEl.textContent = player.name||'Rosarian';
     // Buff icons
@@ -2021,10 +2206,28 @@ Later patches (not in this edit):
     for(const f of fx){
       if(f.kind==='trail'){
         const s=worldToScreen(f.x,f.y); ctx.beginPath(); ctx.arc(s.x,s.y,3,0,6.28); ctx.fill();
+      } else if(f.kind==='hit'){
+        const s=worldToScreen(f.x,f.y);
+        ctx.save();
+        const a = Math.max(0, Math.min(1, f.t/0.18));
+        ctx.globalAlpha = 0.9 * a;
+        ctx.strokeStyle = '#ffd24a'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.moveTo(s.x-6, s.y); ctx.lineTo(s.x+6, s.y); ctx.moveTo(s.x, s.y-6); ctx.lineTo(s.x, s.y+6); ctx.stroke();
+        ctx.restore();
       } else if(f.kind==='arc'){
         const s=worldToScreen(f.x,f.y); ctx.strokeStyle='rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.arc(s.x,s.y,f.r, f.a-0.9, f.a+0.9); ctx.stroke();
       } else if(f.kind==='boom'){
         const s=worldToScreen(f.x,f.y); ctx.strokeStyle='rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.arc(s.x,s.y,24,0,6.28); ctx.stroke();
+      } else if(f.kind==='slash'){
+        const s=worldToScreen(f.x,f.y); ctx.save();
+        ctx.translate(s.x, s.y); ctx.rotate(f.a);
+        // bright core
+        ctx.globalAlpha = 0.8 * (f.t/0.22);
+        const grd = ctx.createLinearGradient(0,0,f.r,0); grd.addColorStop(0,'#e8f5ff'); grd.addColorStop(1,'rgba(200,240,255,0)');
+        ctx.strokeStyle = grd; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(0,0,f.r, -0.9, 0.2); ctx.stroke();
+        // soft outer glow
+        ctx.globalAlpha = 0.5 * (f.t/0.22); ctx.strokeStyle='rgba(150,210,255,0.6)'; ctx.lineWidth=12; ctx.beginPath(); ctx.arc(0,0,f.r*0.96, -0.95, 0.25); ctx.stroke();
+        ctx.restore();
       } else if(f.kind==='dmg'){
         const s=worldToScreen(f.x,f.y);
         const life = f.t; const alpha = Math.max(0, Math.min(1, life/0.9));
@@ -2034,7 +2237,10 @@ Later patches (not in this edit):
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillStyle = f.crit? '#ffd24a' : '#e6eef7';
         ctx.globalAlpha = 0.85*alpha;
-        ctx.fillText(String(f.val), s.x, s.y - 10 - rise);
+        // Damage type icon
+        let icon = '';
+        if(f.dtype==='magic') icon = '✨'; else if(f.dtype==='fire') icon = '🔥'; else icon = '⚔️';
+        ctx.fillText(icon+ ' ' + String(f.val), s.x, s.y - 10 - rise);
         ctx.restore();
       } else if(f.kind==='miss'){
         const s=worldToScreen(f.x,f.y);
