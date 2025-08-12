@@ -94,6 +94,7 @@ Later patches (not in this edit):
   .hotbar{position:absolute; left:50%; transform:translateX(-50%); bottom:70px; display:flex; gap:8px; pointer-events:auto}
   .slot{width:64px; height:64px; border-radius:12px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.14); display:grid; place-items:center; position:relative; font-size:24px}
   .slot b{position:absolute; left:6px; top:4px; font-size:11px; opacity:.7}
+  .hotbar .slot svg{width:36px; height:36px; display:block}
   .cd{position:absolute; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; border-radius:10px; font-size:12px}
 
   /* Touch controls */
@@ -186,8 +187,8 @@ Later patches (not in this edit):
     </div>
 
     <div class="hotbar" id="hotbar" aria-label="skills">
-      <div class="slot" data-s="0"><b>1</b><span id="sicon0">—</span><div class="cd" id="scd0"></div></div>
-      <div class="slot" data-s="1"><b>2</b><span id="sicon1">—</span><div class="cd" id="scd1"></div></div>
+      <div class="slot" data-s="0" title="Skill 1"><b>1</b><span id="sicon0">—</span><div class="cd" id="scd0"></div></div>
+      <div class="slot" data-s="1" title="Locked until Lv 10"><b>2</b><span id="sicon1">—</span><div class="cd" id="scd1"></div></div>
       <div class="slot" data-s="2"><b>3</b><span id="sicon2">—</span><div class="cd" id="scd2"></div></div>
       <div class="slot" data-s="3"><b>4</b><span id="sicon3">—</span><div class="cd" id="scd3"></div></div>
     </div>
@@ -976,27 +977,27 @@ Later patches (not in this edit):
   // Skills
   const SKILL_DB={
     Visitor:[
-      {id:'roll', name:'Quick Step', icon:'🌀', cd:6, mp:8, use:()=>dash(160)},
-      {id:'bomb', name:'Pebble Toss', icon:'🪨', cd:4, mp:6, use:()=>shootCone(3,50,0.6)}
+      {id:'roll', name:'Quick Step', icon:'🌀', cd:6, mp:8, use:()=>dash(160), desc:'Dash forward quickly to evade danger.', req:{wep:null}},
+      {id:'bomb', name:'Pebble Toss', icon:'🪨', cd:4, mp:6, use:()=>shootCone(3,50,0.6), desc:'Toss a spread of pebbles in a cone.', req:{wep:null}}
     ],
     Soldier:[
-      {id:'slash', name:'Power Slash', icon:'⚔️', cd:5, mp:12, use:()=>arcStrike(70,1.4)},
-      {id:'whirl', name:'Whirlwind', icon:'🌀', cd:10, mp:16, use:()=>spinAoE(90,0.7)},
-      {id:'berserk', name:'Berserk', icon:'🔥', cd:20, mp:0, use:()=>{ player.buffs.push({aspd:0.75, atk:6, t:10}); notify('Berserk!'); }}
+      {id:'slash', name:'Power Slash', icon:'⚔️', cd:5, mp:12, use:()=>arcStrike(70,1.4), desc:'A heavy melee slash.', req:{wep:'sword'}},
+      {id:'whirl', name:'Whirlwind', icon:'🌀', cd:10, mp:16, use:()=>spinAoE(90,0.7), desc:'Spin and strike all around.', req:{wep:'sword'}},
+      {id:'berserk', name:'Berserk', icon:'🔥', cd:20, mp:0, use:()=>{ player.buffs.push({aspd:0.75, atk:6, t:10}); notify('Berserk!'); }, desc:'Increase ASPD and ATK for a short time.', req:{wep:null}}
     ],
     Hawker:[
-      {id:'dbl', name:'Double Shot', icon:'🎯', cd:4, mp:10, use:()=>multiShot(2,10)},
-      {id:'flurry', name:'Flurry', icon:'🥷', cd:7, mp:12, use:()=>arcStrike(60,2.0,3)},
-      {id:'haste', name:'Haste', icon:'💨', cd:22, mp:0, use:()=>{ player.buffs.push({speed:120, t:10}); notify('Haste up!'); }}
+      {id:'dbl', name:'Double Shot', icon:'🎯', cd:4, mp:10, use:()=>multiShot(2,10), desc:'Fire two quick shots.', req:{wep:'bow'}},
+      {id:'flurry', name:'Flurry', icon:'🥷', cd:7, mp:12, use:()=>arcStrike(60,2.0,3), desc:'Rapid melee strikes.', req:{wep:'katar'}},
+      {id:'haste', name:'Haste', icon:'💨', cd:22, mp:0, use:()=>{ player.buffs.push({speed:120, t:10}); notify('Haste up!'); }, desc:'Greatly increases movement speed.', req:{wep:null}}
     ],
     Muse:[
-      {id:'bolt', name:'Mana Bolt', icon:'✨', cd:2.6, mp:10, use:()=>magicBolt(1.2)},
-      {id:'heal', name:'Heal', icon:'➕', cd:6, mp:14, use:()=>{ player.hp=clamp(player.hp+50,0,player.hpMax); notify('Healed'); }},
-      {id:'haste', name:'Haste', icon:'💨', cd:20, mp:10, use:()=>{ player.buffs.push({speed:140, t:10}); notify('Haste up!'); }}
+      {id:'bolt', name:'Mana Bolt', icon:'✨', cd:2.6, mp:10, use:()=>magicBolt(1.2), desc:'Fire a concentrated mana bolt.', req:{wep:'wand'}},
+      {id:'heal', name:'Heal', icon:'➕', cd:6, mp:14, use:()=>{ player.hp=clamp(player.hp+50,0,player.hpMax); notify('Healed'); }, desc:'Restore HP.', req:{wep:null}},
+      {id:'haste', name:'Haste', icon:'💨', cd:20, mp:10, use:()=>{ player.buffs.push({speed:140, t:10}); notify('Haste up!'); }, desc:'Boost movement speed.', req:{wep:null}}
     ],
     Dealer:[
-      {id:'nade', name:'Grenade', icon:'💣', cd:6, mp:10, use:()=>grenade()},
-      {id:'turret', name:'Auto-Turret', icon:'🔧', cd:14, mp:18, use:()=>deployTurret()}
+      {id:'nade', name:'Grenade', icon:'💣', cd:6, mp:10, use:()=>grenade(), desc:'Lob a grenade that explodes.', req:{wep:null}},
+      {id:'turret', name:'Auto-Turret', icon:'🔧', cd:14, mp:18, use:()=>deployTurret(), desc:'Deploy a temporary turret.', req:{wep:null}}
     ]
   };
 
@@ -1023,7 +1024,13 @@ Later patches (not in this edit):
 
   function setSkillsForJob(job){
     const defs=SKILL_DB[job]||SKILL_DB['Visitor'];
-    for(let i=0;i<4;i++){ player.skills[i]=defs[i]||null; player.skillCd[i]=0; sicons[i].textContent = defs[i]? defs[i].icon:'—'; scds[i].style.display='none'; }
+    for(let i=0;i<4;i++){
+      player.skills[i]=defs[i]||null; player.skillCd[i]=0;
+      sicons[i].textContent = defs[i]? defs[i].icon:'—'; scds[i].style.display='none';
+      if(defs[i]){ const tip = defs[i].desc? `${defs[i].name} — ${defs[i].desc}${defs[i].req&&defs[i].req.wep? ` (Req: ${defs[i].req.wep})`:''}` : defs[i].name; const slotEl = document.querySelector(`.hotbar .slot[data-s="${i}"]`); if(slotEl) slotEl.title = tip; }
+    }
+    // Remove skill from slot 2; all non-weapon AOEs locked until Lv 10
+    player.skills[1] = null; sicons[1].textContent='—'; const slot2=document.querySelector('.hotbar .slot[data-s="1"]'); if(slot2) slot2.title='Locked until Lv 10';
   }
 
   // Simple refine system (Smith)
@@ -1091,7 +1098,9 @@ Later patches (not in this edit):
   function tryUseSkill(slot){
     const s = player.skills[slot]; if(!s) return notify('No skill in slot '+(slot+1));
     if(player.skillCd[slot]>0) return;
-    if(player.level < 10){ notify('Skills unlock at Lv 10. Keep leveling!'); return; }
+    if(player.level < 10 && !s.unlockedBelow10){ notify('Skills unlock at Lv 10. Keep leveling!'); return; }
+    // Weapon requirement check
+    if(s.req && s.req.wep){ const wepType=getEquippedWeaponType(); if(wepType!==s.req.wep){ notify(`${s.name} requires a ${s.req.wep.toUpperCase()}`); return; } }
     if(player.mp < s.mp) return notify('Not enough MP');
     player.mp-=s.mp; s.use(); player.skillCd[slot]=s.cd; scds[slot].style.display='grid';
   }
@@ -1140,6 +1149,51 @@ Later patches (not in this edit):
 
   // Skill helpers
   function dash(len){ const a=player.dir; player.x+=Math.cos(a)*len; player.y+=Math.sin(a)*len; fx.push({t:0.3, kind:'dash', x:player.x, y:player.y}); }
+  // Weapon AOE supers (slot 1/2 hotbar)
+  function superWhirlwind(){
+    const radius = 120; const duration=0.9; const spins=8;
+    for(let i=0;i<spins;i++){
+      setTimeout(()=>{ arcStrike(radius, 1.1, 1); fx.push({t:0.25, kind:'whirl', x:player.x, y:player.y, r:radius}); vibrate(12); Sfx.play('slash'); }, i*(duration*1000/spins));
+    }
+  }
+  function superWindstorm(){
+    const radius = 160; const ticks=6; const tickMs=160; let angle=0;
+    for(let i=0;i<ticks;i++){
+      setTimeout(()=>{
+        angle += Math.PI/3;
+        // Freeze + damage
+        for(const m of ents){ if(!m.alive) continue; const d=dist(player.x,player.y,m.x,m.y); if(d<radius){ const out=calcDamage(player.atk*1.1,'magic'); m.hp-=out.dmg; showDamage(m.x,m.y,out.dmg,out.crit,'magic'); m.hurt=0.2; m.speed = Math.max(20, (m.speed||90)*0.35); if(m.hp<=0){ m.alive=false; onMobKilled(m);} } }
+        fx.push({t:0.22, kind:'wind', x:player.x, y:player.y, r:radius, a:angle}); vibrate(10); Sfx.play('cast');
+      }, i*tickMs);
+    }
+  }
+  function superBowVolley(){
+    const n=16; const spread=360; for(let i=0;i<n;i++){ const a=(i/n)*Math.PI*2; shoot(player.x,player.y,a, player.atk*0.75, player.projSpeed+60, 'player'); }
+    fx.push({t:0.28, kind:'burst', x:player.x, y:player.y, r:120});
+  }
+  function superKatarFlurry(){
+    for(let i=0;i<5;i++){ setTimeout(()=>{ arcStrike(70, 1.2, 3, 8); fx.push({t:0.22, kind:'slash', x:player.x, y:player.y, a:getAimDir(), r:86}); vibrate(8); }, i*90); }
+  }
+  function superGunShockwave(){
+    // Bullet Storm: radial bullet sprays in waves
+    const waves=5; const bulletsPerWave=44; const speedBase = player.projSpeed+120; const dmgBase = player.atk*0.75;
+    for(let w=0; w<waves; w++){
+      setTimeout(()=>{
+        const jitter = Math.random()*Math.PI*2;
+        for(let i=0;i<bulletsPerWave;i++){
+          const a = jitter + (i/bulletsPerWave)*Math.PI*2 + (Math.random()*0.18-0.09);
+          const sp = speedBase + (Math.random()*80-40);
+          shoot(player.x,player.y,a, dmgBase, sp, 'player', 'bullet');
+        }
+        fx.push({t:0.22, kind:'spray', x:player.x, y:player.y, r:140});
+        Sfx.play('gun');
+      }, w*120);
+    }
+  }
+  function superWandNova(){
+    const n=28; for(let i=0;i<n;i++){ const a=(i/n)*Math.PI*2; shoot(player.x,player.y,a, player.atk*0.85+8, player.projSpeed+30, 'player','magic'); }
+    fx.push({t:0.3, kind:'nova', x:player.x, y:player.y, r:150}); Sfx.play('cast');
+  }
   function arcStrike(radius, mult=1.0, swings=1, step=0){
     const base = player.atk*mult; const a0=getAimDir(); for(let k=0;k<swings;k++){
       setTimeout(()=>{
@@ -1177,10 +1231,20 @@ Later patches (not in this edit):
   function spawnMob(type,x,y){
     type = normalizeType(type);
     const base = {kind:'mob', type, x, y, r:18, speed:90, hp:40, hpMax:40, atk:8, alive:true, hurt:0, aggro:0, mcd:0};
-    if(type==='jelly'){ Object.assign(base,{r:19,speed:90,hp:35,hpMax:35,atk:6}); }
+    if(type==='jelly'){ Object.assign(base,{
+      r:19,speed:64,hp:35,hpMax:35,atk:6,
+      // Hopping bean physics and presentation (smoother cadence)
+      z:0, vz:0, hopCd:Math.random()*0.9 + 1.9, squash:0, stretch:0,
+      vx:0, vy:0,
+      seed:(Math.random()*1000)|0,
+      // ROSE-like green jelly bean base color
+      col:'#68c64f'
+    }); }
     if(type==='pumpkin'){ Object.assign(base,{r:19,speed:70,hp:70,hpMax:70,atk:10}); }
     if(type==='flanae'){ Object.assign(base,{r:18,speed:120,hp:45,hpMax:45,atk:8, flyer:true}); }
-    if(type==='jellyking'){ Object.assign(base,{r:28,speed:85,hp:360,hpMax:360,atk:14, boss:true}); }
+    if(type==='jellyking'){ Object.assign(base,{r:28,speed:80,hp:360,hpMax:360,atk:14, boss:true,
+      z:0, vz:0, hopCd:Math.random()*1.0 + 1.0, squash:0, stretch:0, vx:0, vy:0, seed:(Math.random()*1000)|0, col:'#f35ac9'
+    }); }
     if(type==='moldy'){ Object.assign(base,{r:20,speed:70,hp:120,hpMax:120,atk:16}); }
     if(type==='moldy_elite'){ Object.assign(base,{r:22,speed:80,hp:220,hpMax:220,atk:24}); }
     if(type==='rockgolem'){ Object.assign(base,{r:26,speed:60,hp:420,hpMax:420,atk:30, golem:true}); }
@@ -1189,9 +1253,9 @@ Later patches (not in this edit):
     ents.push(base); return base;
   }
 
-  // Populate mobs
-  for(let i=0;i<120;i++){
-    const t = i%3===0? 'jelly' : (i%3===1? 'pumpkin':'flanae');
+  // Populate mobs — start gentle: only a handful of Jellies at first
+  for(let i=0;i<24;i++){
+    const t = 'jelly';
     const x = rand(TILE*8, TILE*(MAP_W-8));
     const y = rand(TILE*6, TILE*(MAP_H-6));
     if(dist(x,y,startPos.x,startPos.y)>TILE*10) spawnMob(t,x,y);
@@ -1209,7 +1273,7 @@ Later patches (not in this edit):
   // Quests
   const quests=[
     {id:0, title:'Meet the Plains', line:'Welcome! Interact with the wooden signpost.', need:0, type:'talk', done:false, reward:{xp:30,gold:40, items:[['potion_hp',2]]}},
-    {id:1, title:'Jelly Cleanup', line:'Defeat 10 Jelly Blobs', need:10, type:'jelly', prog:0, done:false, reward:{xp:90,gold:120, items:[['potion_hp',2]]}},
+    {id:1, title:'Jelly Bean Cleanup', line:'Defeat 10 Jelly Beans', need:10, type:'jelly', prog:0, done:false, reward:{xp:90,gold:120, items:[['potion_hp',2]]}},
     {id:2, title:'Pumpkin Patrol', line:'Defeat 6 Pumpkinlings', need:6, type:'pumpkin', prog:0, done:false, reward:{xp:160,gold:160, items:[['potion_mp',2]]}},
     {id:3, title:'Cart License', line:'Talk to the Cart Master (🛞). Complete his task to earn your license.', need:1, type:'cartquest', prog:0, done:false, reward:{xp:100,gold:80, items:[['cart_pass',1]]}},
     {id:4, title:'Plains Protector', line:'Reach Level 10 then pick a Job with the Trainer (★).', need:10, type:'level', done:false, reward:{xp:240,gold:240, items:[['wood_staff',1],['wood_katar',1],['wood_wand',1]]}},
@@ -1324,8 +1388,9 @@ Later patches (not in this edit):
     ents.length=0; projs.length=0; drops.length=0; turrets.length=0; fx.length=0; summonedCart=null;
     // default starter via CC, no extra weapon here
     // Wings handled via CC
-    for(let i=0;i<120;i++){
-      const t = i%3===0? 'jelly' : (i%3===1? 'pumpkin':'flanae');
+    // New game: keep early area calm — just a few Jellies to begin with
+    for(let i=0;i<24;i++){
+      const t = 'jelly';
       const x = rand(TILE*8, TILE*(MAP_W-8));
       const y = rand(TILE*6, TILE*(MAP_H-6));
       if(dist(x,y,startPos.x,startPos.y)>TILE*10) spawnMob(t,x,y);
@@ -1494,7 +1559,7 @@ Later patches (not in this edit):
     if(!transition.to && transition.a<=0) return;
     if(transition.to){ transition.a += 0.06; if(transition.a>=1){
         const {next, spawnTag} = transition.to;
-        mapName = next; softResetRuntime(); MAPS[mapName].gen();
+        mapName = next; softResetRuntime(); MAPS[mapName].gen(); ensureBaselineSpawns();
         const sp = MAPS[mapName].spawn[spawnTag] || Object.values(MAPS[mapName].spawn)[0];
         player.x = sp.x; player.y = sp.y; saveMeta(); transition.to=null;
       }
@@ -1504,6 +1569,17 @@ Later patches (not in this edit):
   function changeMap(next, spawnTag='main'){ transition.to={next, spawnTag}; }
 
   function softResetRuntime(){ ents.length=0; projs.length=0; drops.length=0; decor.length=0; turrets.length=0; portals.length=0; }
+  // Ensure maps always repopulate mobs even if no spawn calls happened in gen() due to future edits
+  function ensureBaselineSpawns(){
+    const countByType = {};
+    for(const e of ents){ if(!e.alive) continue; countByType[e.type] = (countByType[e.type]|0) + 1; }
+    const need=(type,target)=>{ const have=countByType[type]|0; const missing=Math.max(0,target-have); for(let i=0;i<missing;i++){ let tries=0; while(tries++<800){ const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0; const tt=tiles[y*MAP_W+x]; if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(type,wx,wy); break; } } } } };
+    if(mapName==='plains'){ need('jelly',16); need('choropy',12); }
+    else if(mapName==='zant'){ need('woopie',26); }
+    else if(mapName==='junon'){ need('moldy',40); need('moldy_elite',12); need('rockgolem',6); }
+    else if(mapName==='elverloon'){ need('woopie',34); need('moldy_elite',12); need('rockgolem',6); }
+    else if(mapName==='luxem'){ need('choropy',28); }
+  }
 
   function interactHarbor(){
     if(mapName==='plains'){
@@ -1591,6 +1667,13 @@ Later patches (not in this edit):
     townZones.length = 0;
     townZones.push({type:'circle', x:TILE*7.5, y:TILE*6.2, r:TILE*5.6});
     el('zone').textContent = MAPS.plains.label;
+    // Spawns: calmer for new players — mostly jellies in Plains
+    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1400){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
+    const spawnFar=(t,count,minDist)=>{let n=0,tries=0;while(n<count&&tries<1600){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy) && dist(wx,wy,startPos.x,startPos.y)>(minDist||TILE*22)){ spawnMob(t,wx,wy); n++; }}}};
+    // Very light jelly presence near town
+    spawnOut('jelly',18);
+    // Choropy ring appears further out around the hub
+    spawnFar('choropy',16, TILE*22);
     // Portals: Plains → Zant
     portals.length = 0;
     portals.push({kind:'npc', npc:'portal', x:TILE*16, y:TILE*10, r:22, dest:'zant', tag:'plaza'});
@@ -1627,8 +1710,8 @@ Later patches (not in this edit):
     townZones.push({type:'rect', x:(cx-1)*TILE, y:(cy-1)*TILE, w:(cw+2)*TILE, h:(ch+2)*TILE});
     el('zone').textContent = MAPS.junon.label;
     // Junon spawns (Patch 7): tougher mobs
-    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0||tt===1){spawnMob(t,x*TILE+TILE/2,y*TILE+TILE/2);n++;}}};
-    spawnOut('moldy',60); spawnOut('moldy_elite',20); spawnOut('rockgolem',8);
+    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x]; if(tt===0||tt===1){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
+    spawnOut('moldy',44); spawnOut('moldy_elite',14); spawnOut('rockgolem',6);
     // Portal to El Verloon
     portals.length = 0;
   portals.push({kind:'npc', npc:'portal', x:(cx+cw+1)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'elverloon', tag:'oasis'});
@@ -1636,25 +1719,30 @@ Later patches (not in this edit):
   portals.push({kind:'npc', npc:'portal', x:(cx-2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'luxem', tag:'grove'});
   }
 
-  // Zant — compact village with low-mid mobs nearby
+  // Zant — desert village with sandy dunes
   function genZant(){
-    for(let i=0;i<MAP_W*MAP_H;i++) tiles[i]=0;
+    for(let i=0;i<MAP_W*MAP_H;i++) tiles[i]=1; // sand base
     const cx=20, cy=16, cw=26, ch=18;
     for(let y=cy; y<cy+ch; y++) for(let x=cx; x<cx+cw; x++) tiles[y*MAP_W+x] = 1;
-    // scatter decor
+    // scatter rocks and sparse shrubs + new cacti/bones
     decor.length=0;
-    for(let i=0;i<80;i++) decor.push({t: Math.random()>0.5? 'tree':'flower', x: rand(TILE*4, TILE*(MAP_W-4)), y: rand(TILE*4, TILE*(MAP_H-4))});
-    // NPCs
+    for(let i=0;i<90;i++) decor.push({t:'rock', x: rand(TILE*3, TILE*(MAP_W-3)), y: rand(TILE*3, TILE*(MAP_H-3))});
+    for(let i=0;i<24;i++) decor.push({t:'cactus', x: rand(TILE*3, TILE*(MAP_W-3)), y: rand(TILE*3, TILE*(MAP_H-3))});
+    for(let i=0;i<14;i++) decor.push({t:'bones', x: rand(TILE*3, TILE*(MAP_W-3)), y: rand(TILE*3, TILE*(MAP_H-3))});
+    // NPCs (plaza)
     sign.x=(cx+Math.floor(cw/2))*TILE; sign.y=(cy+2)*TILE;
     merchant.x=(cx+Math.floor(cw/2)-3)*TILE; merchant.y=(cy+8)*TILE;
     trainer.x=(cx+Math.floor(cw/2)+3)*TILE; trainer.y=(cy+8)*TILE;
     storageNPC.x=(cx+Math.floor(cw/2))*TILE; storageNPC.y=(cy+10)*TILE;
-    // town safe zone
-    townZones.length=0; townZones.push({type:'rect', x:(cx-1)*TILE, y:(cy-1)*TILE, w:(cw+2)*TILE, h:(ch+2)*TILE});
+    // town safe zone — rectangular plaza around NPCs
+    townZones.length=0; townZones.push({type:'rect', x:(cx-2)*TILE, y:(cy-3)*TILE, w:(cw+4)*TILE, h:(ch+6)*TILE});
     el('zone').textContent = MAPS.zant.label;
     // spawns outside town
-    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
-    spawnOut('choropy',40); spawnOut('woopie',24);
+    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1600){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x]; if(tt===0||tt===1){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
+    // Ensure visibility: spawn a cluster near town edge
+    const ringSpawn=(t,count,rad)=>{let n=0,ang=0; while(n<count){ const wx=(cx+cw+3)*TILE + Math.cos(ang)*rad; const wy=(cy+Math.floor(ch/2))*TILE + Math.sin(ang)*rad; if(!isInTown(wx,wy)) { spawnMob(t,wx,wy); n++; } ang+=Math.PI*2/count; }};
+    spawnOut('woopie',32);
+    ringSpawn('woopie',6, TILE*8);
     // portals: Zant → Plains, Zant → Junon
     portals.length=0;
     portals.push({kind:'npc', npc:'portal', x:(cx-2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'plains', tag:'main'});
@@ -1677,7 +1765,7 @@ Later patches (not in this edit):
     townZones.length=0; townZones.push({type:'circle', x:TILE*54, y:TILE*24, r:TILE*6});
     el('zone').textContent = MAPS.elverloon.label;
     const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1600){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0||tt===1){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
-    spawnOut('woopie',50); spawnOut('moldy_elite',18); spawnOut('rockgolem',10);
+    spawnOut('woopie',40); spawnOut('moldy_elite',14); spawnOut('rockgolem',8);
     portals.length=0; portals.push({kind:'npc', npc:'portal', x:TILE*18, y:TILE*48, r:22, dest:'junon', tag:'gate'});
   // El Verloon → Luxem Forest secret portal
   portals.push({kind:'npc', npc:'portal', x:TILE*56, y:TILE*22, r:22, dest:'luxem', tag:'grove'});
@@ -1700,9 +1788,9 @@ function genLuxem(){
   const gx = 28, gy = 22; sign.x = gx*TILE; sign.y = (gy-2)*TILE; merchant.x = (gx+2)*TILE; merchant.y = gy*TILE; trainer.x = (gx-2)*TILE; trainer.y = gy*TILE; storageNPC.x = gx*TILE; storageNPC.y = (gy+2)*TILE;
   townZones.length=0; townZones.push({type:'circle', x:gx*TILE, y:gy*TILE, r:TILE*6});
   el('zone').textContent = MAPS.luxem.label;
-  // Spawns: choropy/woopie mix
+  // Spawns: choropy only (no Woopies in Luxem)
   const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1400){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
-  spawnOut('choropy',36); spawnOut('woopie',28);
+  spawnOut('choropy',30);
   portals.length=0;
   // Luxem exits back
   portals.push({kind:'npc', npc:'portal', x:(gx-6)*TILE, y:gy*TILE, r:22, dest:'zant', tag:'plaza'});
@@ -1733,6 +1821,24 @@ function genLuxem(){
     jobWin.style.display='block'; }
 
   function changeJob(j){ player.job=j; jobEl.textContent=j; notify('Job changed to '+j); setSkillsForJob(j); if(j==='Soldier') addToInv('wood_sword',1); if(j==='Hawker') addToInv('wood_bow',1); if(j==='Dealer') addToInv('wood_katar',1); if(j==='Muse') addToInv('wood_wand',1); save(); }
+
+  function setSkillsForJob(job){
+    // Slot 1: Weapon ultimate AOE; Slot 2: Utility/alt AOE. Slots 3-4 keep DB skills
+    const wepType = getEquippedWeaponType();
+    const aoeForWeapon = ()=>{
+      if(wepType==='sword') return {id:'whirlwind', name:'Whirlwind', icon:'🌀', cd:10, mp:14, use:()=>superWhirlwind(), unlockedBelow10:true, desc:'Spin attack around you.', req:{wep:'sword'}};
+      if(wepType==='staff') return {id:'windstorm', name:'Windstorm', icon:'🌪️', cd:12, mp:16, use:()=>superWindstorm(), unlockedBelow10:true, desc:'Magical wind pulses.', req:{wep:'staff'}};
+      if(wepType==='wand') return {id:'arcane_nova', name:'Arcane Nova', icon:'✨', cd:10, mp:14, use:()=>superWandNova(), unlockedBelow10:true, desc:'Release a nova of mana.', req:{wep:'wand'}};
+      if(wepType==='bow') return {id:'arrow_volley', name:'Arrow Volley', icon:'🎯', cd:10, mp:12, use:()=>superBowVolley(), unlockedBelow10:true, desc:'Volley of arrows all directions.', req:{wep:'bow'}};
+      if(wepType==='gun') return {id:'bullet_storm', name:'Bullet Storm', icon:'💥', cd:12, mp:14, use:()=>superGunShockwave(), unlockedBelow10:true, desc:'Spray bullets in every direction.', req:{wep:'gun'}};
+      if(wepType==='katar') return {id:'blade_flurry', name:'Blade Flurry', icon:'🥷', cd:10, mp:12, use:()=>superKatarFlurry(), unlockedBelow10:true, desc:'Rapid circular slashes.', req:{wep:'katar'}};
+      return {id:'whirlwind', name:'Whirlwind', icon:'🌀', cd:10, mp:12, use:()=>superWhirlwind(), unlockedBelow10:true, desc:'Spin attack around you.', req:{wep:'sword'}};
+    };
+    // Primary AOE in slot 1 only; slot 2 cleared per request
+    player.skills[0] = aoeForWeapon();
+    sicons[0].textContent = player.skills[0].icon;
+    player.skills[1] = null; sicons[1].textContent='—';
+  }
 
   // PATCH 1: weapon-aware helpers and primary attack
   function getEquippedWeaponType(){
@@ -2117,6 +2223,41 @@ function genLuxem(){
       } else {
         m.x += (r()-0.5)*20*dt; m.y += (r()-0.5)*20*dt;
       }
+      // Hopping update for jelly and jellyking
+      if(m.type==='jelly' || m.type==='jellyking'){
+        m.hopCd -= dt;
+        // Only choose a new direction on takeoff
+        if(m.hopCd<=0 && m.z===0){
+          const a = Math.atan2(player.y-m.y, player.x-m.x) + (r()*0.8-0.4); // drift towards player
+          const hopSpeed = m.boss? 64 : 70; // clearer forward travel during hops
+          m.vx = Math.cos(a)*hopSpeed;
+          m.vy = Math.sin(a)*hopSpeed;
+          // Slightly higher/longer arc
+          m.vz = (m.boss? 98: 88) + (r()*6-3);
+          m.stretch = 0.10;
+          m.hopCd = (m.boss? 1.05: 1.2) + Math.random()*0.35; // tiny bit longer between hops
+        }
+        // Air-time motion
+        if(m.z>0 || m.vz>0){
+          m.x += m.vx*dt*0.88; // travel while in air
+          m.y += m.vy*dt*0.88;
+        }
+        // Gravity
+        if(m.vz!==undefined){
+          m.vz -= 610*dt; // a bit lighter gravity for slightly longer airtime
+          m.z = Math.max(0, m.z + m.vz*dt);
+          // snap only at the very end to avoid hover due to frame rounding
+          if(m.z<1.2 && m.vz<8){ m.z=0; m.vz=0; }
+          if(m.z===0 && m.vz<0){
+            // landing squash
+            m.squash = 0.14;
+            m.vz = 0; m.vx*=0.6; m.vy*=0.6;
+          }
+        }
+        // decay squash/stretch
+        if(m.squash>0) m.squash = Math.max(0, m.squash - 1.0*dt);
+        if(m.stretch>0) m.stretch = Math.max(0, m.stretch - 1.0*dt);
+      }
       if(m.hurt>0) m.hurt-=dt; else m.hurt=0;
     }
 
@@ -2191,10 +2332,21 @@ function genLuxem(){
           ctx.fillStyle = g; ctx.fillRect(px,py,TILE,TILE);
           ctx.fillStyle = 'rgba(255,255,255,0.03)';
           for(let i=0;i<3;i++){ ctx.fillRect(px+4+i*16, py+2, 6, TILE-4); }
-        }else if(t===1){ // dirt
-          ctx.fillStyle = '#6d5a35'; ctx.fillRect(px,py,TILE,TILE);
-          ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth=1; ctx.strokeRect(px+0.5,py+0.5,TILE-1,TILE-1);
-          ctx.fillStyle='rgba(255,255,255,0.04)'; ctx.fillRect(px+3,py+3,TILE-6,TILE-6);
+        }else if(t===1){ // dirt or sand (map-dependent)
+          if(mapName==='zant' || mapName==='elverloon'){
+            // sandy tile with muted tones and dune shading
+            const g = ctx.createLinearGradient(0, py, 0, py+TILE);
+            g.addColorStop(0, '#b7954e'); g.addColorStop(1, '#8e7741');
+            ctx.fillStyle = g; ctx.fillRect(px,py,TILE,TILE);
+            // darker dune ridges
+            ctx.fillStyle = 'rgba(0,0,0,0.07)';
+            const wave = 10; const amp=1.6; const y0 = py + TILE*0.65;
+            for(let xx=px; xx<px+TILE; xx+=wave){ const yy = y0 + Math.sin((xx*0.18)) * amp; ctx.fillRect(xx, Math.round(yy), wave-3, 2); }
+          } else {
+            ctx.fillStyle = '#6d5a35'; ctx.fillRect(px,py,TILE,TILE);
+            ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth=1; ctx.strokeRect(px+0.5,py+0.5,TILE-1,TILE-1);
+            ctx.fillStyle='rgba(255,255,255,0.04)'; ctx.fillRect(px+3,py+3,TILE-6,TILE-6);
+          }
         }else{ // water
           const g = ctx.createLinearGradient(0, py, 0, py+TILE);
           g.addColorStop(0, '#2e7da3'); g.addColorStop(1, '#1f5a74');
@@ -2211,7 +2363,28 @@ function genLuxem(){
   }
   function drawDecor(){
     // Decor
-    for(const d of decor){ const s=worldToScreen(d.x,d.y); if(s.x<-50||s.y<-50||s.x>vw+50||s.y>vh+50) continue; if(d.t==='tree'){ ctx.fillStyle='#0f3925'; ctx.beginPath(); ctx.arc(s.x,s.y,20,0,6.28); ctx.fill(); ctx.fillStyle='#205b3a'; ctx.beginPath(); ctx.arc(s.x-8,s.y-10,18,0,6.28); ctx.fill(); } else if(d.t==='rock'){ ctx.fillStyle='#3b4653'; ctx.beginPath(); ctx.arc(s.x,s.y,10,0,6.28); ctx.fill(); } else { ctx.fillStyle='#8fd3a0'; ctx.fillRect(s.x-2,s.y-2,4,4); } }
+    for(const d of decor){
+      const s=worldToScreen(d.x,d.y); if(s.x<-50||s.y<-50||s.x>vw+50||s.y>vh+50) continue;
+      if(d.t==='tree'){
+        ctx.fillStyle='#0f3925'; ctx.beginPath(); ctx.arc(s.x,s.y,20,0,6.28); ctx.fill(); ctx.fillStyle='#205b3a'; ctx.beginPath(); ctx.arc(s.x-8,s.y-10,18,0,6.28); ctx.fill();
+      } else if(d.t==='rock'){
+        ctx.fillStyle = (mapName==='zant'||mapName==='elverloon')? '#5b5242':'#3b4653';
+        ctx.beginPath(); ctx.arc(s.x,s.y,10,0,6.28); ctx.fill();
+      } else if(d.t==='cactus'){
+        // simple saguaro
+        ctx.fillStyle='#3f7d3a';
+        ctx.fillRect(s.x-5, s.y-24, 10, 28);
+        ctx.fillRect(s.x-14, s.y-14, 6, 14);
+        ctx.fillRect(s.x+8, s.y-16, 6, 16);
+        ctx.fillStyle='rgba(255,255,255,0.25)';
+        for(let i=0;i<3;i++){ ctx.fillRect(s.x-4+i*3, s.y-22, 1, 24); }
+      } else if(d.t==='bones'){
+        ctx.strokeStyle='#e9e1d1'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(s.x-10, s.y); ctx.lineTo(s.x+10, s.y); ctx.stroke();
+        ctx.fillStyle='#e9e1d1'; ctx.beginPath(); ctx.arc(s.x-12, s.y, 3, 0, Math.PI*2); ctx.arc(s.x+12, s.y, 3, 0, Math.PI*2); ctx.fill();
+      } else {
+        ctx.fillStyle='#8fd3a0'; ctx.fillRect(s.x-2,s.y-2,4,4);
+      }
+    }
   }
   function drawNPCs(){
     // replaced by sprite-based draws (Patch 2) but keep calls grouped
@@ -2272,6 +2445,33 @@ function genLuxem(){
       } else if(f.kind==='miss'){
         const s=worldToScreen(f.x,f.y);
         ctx.save(); ctx.font='bold 18px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#ff8b73'; ctx.globalAlpha=0.9; ctx.fillText('MISS', s.x, s.y-22); ctx.restore();
+      } else if(f.kind==='whirl'){
+        const s=worldToScreen(f.x,f.y); const a = Math.min(1, f.t/0.25);
+        ctx.save(); ctx.globalAlpha = 0.75*a; const grad = ctx.createRadialGradient(s.x,s.y,10, s.x,s.y,f.r);
+        grad.addColorStop(0,'rgba(220,240,255,0.8)'); grad.addColorStop(1,'rgba(220,240,255,0)');
+        ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(s.x,s.y,f.r,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+      } else if(f.kind==='wind'){
+        const s=worldToScreen(f.x,f.y); ctx.save(); ctx.globalAlpha = 0.65*(f.t/0.22);
+        ctx.translate(s.x,s.y); ctx.rotate(f.a||0);
+        for(let i=0;i<6;i++){
+          ctx.rotate(Math.PI/3);
+          const grd = ctx.createLinearGradient(0,0,f.r,0); grd.addColorStop(0,'rgba(180,230,255,0.9)'); grd.addColorStop(1,'rgba(180,230,255,0)');
+          ctx.strokeStyle = grd; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(0,0,f.r*0.9, -0.8, 0.8); ctx.stroke();
+        }
+        ctx.restore();
+      } else if(f.kind==='burst'){
+        const s=worldToScreen(f.x,f.y); ctx.save(); ctx.globalAlpha=0.7*(f.t/0.28);
+        ctx.strokeStyle='rgba(255,210,100,0.8)'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(s.x,s.y,f.r,0,Math.PI*2); ctx.stroke(); ctx.restore();
+      } else if(f.kind==='shock'){
+        const s=worldToScreen(f.x,f.y); ctx.save(); ctx.globalAlpha = 0.6*(f.t/0.25); ctx.strokeStyle='rgba(120,180,255,0.9)'; ctx.lineWidth=5; ctx.beginPath(); ctx.arc(s.x,s.y,f.r,0,Math.PI*2); ctx.stroke(); ctx.restore();
+      } else if(f.kind==='spray'){
+        const s=worldToScreen(f.x,f.y); ctx.save(); ctx.globalAlpha=0.6*(f.t/0.22); ctx.strokeStyle='rgba(255,210,100,0.85)';
+        for(let k=0;k<14;k++){ const ang = (k/14)*Math.PI*2; const len = f.r*(0.6+0.4*Math.random()); ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x+Math.cos(ang)*len, s.y+Math.sin(ang)*len); ctx.stroke(); }
+        ctx.restore();
+      } else if(f.kind==='nova'){
+        const s=worldToScreen(f.x,f.y); ctx.save(); ctx.globalAlpha=0.7*(f.t/0.3); const grad = ctx.createRadialGradient(s.x,s.y,12, s.x,s.y,f.r);
+        grad.addColorStop(0,'rgba(200,160,255,0.9)'); grad.addColorStop(1,'rgba(200,160,255,0)'); ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(s.x,s.y,f.r,0,Math.PI*2); ctx.fill(); ctx.restore();
       } else if(f.kind==='fairy'){
         const s=worldToScreen(f.x,f.y);
         const bob = Math.sin(performance.now()/400 + f.seed)*4;
@@ -2328,6 +2528,11 @@ function genLuxem(){
   }
 
   // Sprite helpers (PATCH 4)
+  // Small color utilities for bean shading (no external deps)
+  function hexToRgb(h){ const n=h.replace('#',''); const v=n.length===3? n.split('').map(c=>parseInt(c+c,16)) : [parseInt(n.slice(0,2),16),parseInt(n.slice(2,4),16),parseInt(n.slice(4,6),16)]; return {r:v[0],g:v[1],b:v[2]}; }
+  function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+  function lighten(hex, amt){ const {r,g,b}=hexToRgb(hex); const f=t=>Math.round(255 - (255-t)*(1-amt)); return `rgb(${f(r)},${f(g)},${f(b)})`; }
+  function shade(hex, amt){ const {r,g,b}=hexToRgb(hex); const f=t=>Math.round(t*(1-amt)); return `rgb(${f(r)},${f(g)},${f(b)})`; }
   function drawPlayer(){
     const s = worldToScreen(player.x, player.y);
     // Soft blob shadow with depth based on vertical position for fake 3D grounding
@@ -2422,18 +2627,221 @@ function genLuxem(){
 
   function drawMobSprite(m){
     const s=worldToScreen(m.x,m.y);
-    ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(s.x, s.y+m.r*0.4, m.r*0.8, m.r*0.4, 0, 0, Math.PI*2); ctx.fill();
+    // Dynamic ground shadow with height
+    const z = (m.z||0);
+    const shadowScale = Math.max(0.5, 1 - z/260);
+    ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(s.x, s.y+m.r*0.4, m.r*0.8*shadowScale, m.r*0.4*shadowScale, 0, 0, Math.PI*2); ctx.fill();
     ctx.save(); if(m.hurt>0) ctx.globalAlpha = 0.7;
-    if(m.type==='jelly'){ ctx.fillStyle='#5ad1ff'; ctx.beginPath(); ctx.ellipse(s.x, s.y+6, m.r, m.r-6, 0, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#fff'; ctx.fillRect(s.x-6,s.y-2,4,4); ctx.fillRect(s.x+2,s.y-2,4,4); ctx.fillStyle='#0aa'; ctx.fillRect(s.x-4,s.y+2,8,3); }
+    if(m.type==='jelly'){
+      const bodyColor = m.col || '#68c64f';
+      const squ = (m.squash||0), str = (m.stretch||0);
+      const sx = 1 + squ - str*0.4;
+      const sy = 1 - squ + str*0.7;
+      ctx.save();
+      ctx.translate(0, -z*0.7);
+      ctx.scale(sx, sy);
+      const rx = m.r*0.95, ry = m.r*0.86;
+
+      // limbs (subtle, drawn behind body)
+      ctx.save();
+      ctx.strokeStyle = '#efe6d6';
+      ctx.lineWidth = 4; ctx.lineCap='round';
+      ctx.beginPath();
+      ctx.moveTo(s.x - rx*0.6, s.y+2); ctx.lineTo(s.x - rx*1.05, s.y+6); // left arm
+      ctx.moveTo(s.x + rx*0.6, s.y+2); ctx.lineTo(s.x + rx*1.05, s.y+6); // right arm
+      ctx.stroke();
+      ctx.fillStyle = '#efe6d6';
+      ctx.beginPath(); ctx.arc(s.x - rx*1.08, s.y+6, 4, 0, Math.PI*2); ctx.arc(s.x + rx*1.08, s.y+6, 4, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(s.x - rx*0.35, s.y + ry*0.95, 8, 5, 0, 0, Math.PI*2); ctx.ellipse(s.x + rx*0.35, s.y + ry*0.95, 8, 5, 0, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+
+      // body — vertical bean with slight dent
+      ctx.beginPath();
+      ctx.ellipse(s.x-2, s.y-2, rx, ry*0.82, -0.12, 0.3, Math.PI*2);
+      const g = ctx.createRadialGradient(s.x-10, s.y-12, 4, s.x+10, s.y+16, m.r+18);
+      g.addColorStop(0, lighten(bodyColor, 0.22));
+      g.addColorStop(0.45, bodyColor);
+      g.addColorStop(1, shade(bodyColor, 0.62));
+      ctx.fillStyle=g; ctx.fill();
+
+      // headband
+      ctx.fillStyle = '#b83a2c';
+      ctx.fillRect(s.x-14, s.y-ry*0.9, 28, 5);
+      ctx.fillStyle = '#e4b32a';
+      ctx.beginPath(); ctx.arc(s.x, s.y-ry*0.9+2.5, 4.5, 0, Math.PI*2); ctx.fill();
+
+      // gloss highlight
+      const hl = ctx.createRadialGradient(s.x-12, s.y-14, 2, s.x-12, s.y-14, 18);
+      hl.addColorStop(0,'rgba(255,255,255,0.85)'); hl.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=hl; ctx.beginPath(); ctx.ellipse(s.x-12, s.y-14, 12, 7, -0.5, 0, Math.PI*2); ctx.fill();
+
+      // face
+      ctx.fillStyle='white';
+      ctx.beginPath(); ctx.arc(s.x-6, s.y-2, 3, 0, Math.PI*2); ctx.arc(s.x+6, s.y-2, 3, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle='#1a3d7a'; ctx.beginPath(); ctx.arc(s.x-6, s.y-2, 1.6, 0, Math.PI*2); ctx.arc(s.x+6, s.y-2, 1.6, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle='rgba(0,40,20,0.85)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(s.x-6, s.y+5); ctx.quadraticCurveTo(s.x, s.y+8, s.x+6, s.y+5); ctx.stroke();
+      ctx.restore();
+    }
     else if(m.type==='pumpkin'){ ctx.fillStyle='#ff9a35'; ctx.beginPath(); ctx.ellipse(s.x, s.y, m.r+2, m.r-2, 0, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#1e5d2a'; ctx.fillRect(s.x-2, s.y-m.r-6, 4, 8); ctx.strokeStyle='#b65a15'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(s.x-m.r*0.6, s.y); ctx.quadraticCurveTo(s.x, s.y+m.r*0.2, s.x+m.r*0.6, s.y); ctx.stroke(); }
     else if(m.type==='flanae'){ ctx.fillStyle='#8cd85a'; ctx.beginPath(); ctx.ellipse(s.x, s.y, m.r, m.r*0.6, 0, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='rgba(200,255,220,0.6)'; ctx.beginPath(); ctx.ellipse(s.x-8, s.y-8, 14, 8, -0.6, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.ellipse(s.x-8, s.y+8, 14, 8, 0.6, 0, Math.PI*2); ctx.fill(); }
-    else if(m.type==='jellyking'){ ctx.fillStyle='#f35ac9'; ctx.beginPath(); ctx.ellipse(s.x, s.y+6, m.r+3, m.r-4, 0, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#ffd93b'; ctx.fillRect(s.x-14, s.y-m.r-16, 28, 8); ctx.fillStyle='#6cf'; ctx.fillRect(s.x-6, s.y-m.r-14, 4, 4); ctx.fillStyle='#9f5'; ctx.fillRect(s.x+2, s.y-m.r-14, 4, 4); }
+    else if(m.type==='jellyking'){
+      // King Jelly Bean: reuse jelly look, scaled up, then add crown + ring
+      const bodyColor = m.col || '#68c64f';
+      const squ = (m.squash||0), str = (m.stretch||0);
+      const sx = 1 + squ - str*0.4; const sy = 1 - squ + str*0.7;
+      ctx.save(); ctx.translate(0, -(m.z||0)*0.7); ctx.scale(sx,sy);
+      const rx = (m.r+16)*0.98, ry = (m.r+16)*0.9;
+      // limbs
+      ctx.save(); ctx.strokeStyle = '#efe6d6'; ctx.lineWidth = 6; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(s.x - rx*0.6, s.y+6); ctx.lineTo(s.x - rx*1.06, s.y+12);
+      ctx.moveTo(s.x + rx*0.6, s.y+6); ctx.lineTo(s.x + rx*1.06, s.y+12); ctx.stroke(); ctx.restore();
+      // body bean
+      const g = ctx.createRadialGradient(s.x-14, s.y-18, 6, s.x+16, s.y+24, rx+26);
+      g.addColorStop(0, lighten(bodyColor, 0.22)); g.addColorStop(0.45, bodyColor); g.addColorStop(1, shade(bodyColor, 0.62));
+      ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(s.x-2, s.y, rx, ry*0.92, -0.12, 0, Math.PI*2); ctx.fill();
+      // gloss
+      const hl = ctx.createRadialGradient(s.x-18, s.y-22, 2, s.x-18, s.y-22, 26);
+      hl.addColorStop(0,'rgba(255,255,255,0.9)'); hl.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=hl; ctx.beginPath(); ctx.ellipse(s.x-18, s.y-22, 18, 12, -0.5, 0, Math.PI*2); ctx.fill();
+      // face
+      ctx.fillStyle='white'; ctx.beginPath(); ctx.arc(s.x-12, s.y-4, 4.6, 0, Math.PI*2); ctx.arc(s.x+12, s.y-4, 4.6, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle='#1a3d7a'; ctx.beginPath(); ctx.arc(s.x-12, s.y-4, 2.2, 0, Math.PI*2); ctx.arc(s.x+12, s.y-4, 2.2, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle='rgba(0,40,20,0.85)'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(s.x-12, s.y+10); ctx.quadraticCurveTo(s.x, s.y+14, s.x+12, s.y+10); ctx.stroke();
+      // crown
+      ctx.fillStyle='#ffd93b'; ctx.beginPath();
+      ctx.moveTo(s.x-30, s.y-ry-18); ctx.lineTo(s.x-18, s.y-ry-2); ctx.lineTo(s.x-6, s.y-ry-18); ctx.lineTo(s.x+6, s.y-ry-2); ctx.lineTo(s.x+18, s.y-ry-18); ctx.lineTo(s.x+30, s.y-ry-2); ctx.lineTo(s.x+30, s.y-ry-18); ctx.lineTo(s.x-30, s.y-ry-18); ctx.fill();
+      ctx.fillStyle='#6cf'; ctx.fillRect(s.x-14, s.y-ry-10, 6, 4); ctx.fillStyle='#9f5'; ctx.fillRect(s.x+8, s.y-ry-10, 6, 4);
+      // floating ring
+      ctx.strokeStyle='rgba(255,217,59,0.9)'; ctx.lineWidth=3; ctx.beginPath(); ctx.ellipse(s.x, s.y-ry-28, 28, 9, 0, 0, Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
     else if(m.type==='moldy'){ const g=ctx.createLinearGradient(0, s.y-m.r, 0, s.y+m.r); g.addColorStop(0,'#8dcf6a'); g.addColorStop(1,'#537a3d'); ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(s.x, s.y+4, m.r, m.r-4, 0, 0, Math.PI*2); ctx.fill(); }
     else if(m.type==='moldy_elite'){ const g=ctx.createLinearGradient(0, s.y-m.r, 0, s.y+m.r); g.addColorStop(0,'#79bf58'); g.addColorStop(1,'#3e6a2a'); ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(s.x, s.y+3, m.r+2, m.r-2, 0, 0, Math.PI*2); ctx.fill(); }
     else if(m.type==='rockgolem'){ ctx.fillStyle='#5b676f'; ctx.fillRect(s.x-m.r+2, s.y-m.r+6, (m.r*2)-4, (m.r*2)-10); ctx.fillStyle='#2a3238'; ctx.fillRect(s.x-6, s.y-4, 12, 8); }
-    else if(m.type==='choropy'){ ctx.fillStyle='#7ed957'; ctx.beginPath(); ctx.ellipse(s.x, s.y, m.r, m.r*0.7, 0, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#3a742a'; ctx.fillRect(s.x-2, s.y-m.r-6, 4, 10); }
-    else if(m.type==='woopie'){ ctx.fillStyle='#d9a35b'; ctx.beginPath(); ctx.ellipse(s.x, s.y, m.r+1, m.r*0.8, 0, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#5b3a2a'; ctx.fillRect(s.x-4, s.y-2, 8, 4); }
-    ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(s.x-18, s.y-m.r-12, 36, 5); ctx.fillStyle='#e55'; ctx.fillRect(s.x-18, s.y-m.r-12, 36*(m.hp/m.hpMax), 5);
+    else if(m.type==='choropy'){
+      // Choropy — cute horizontal caterpillar with face leading
+      ctx.save();
+      const t = (performance.now? performance.now(): Date.now())*0.001;
+      const wig = Math.sin(t*3 + (m.x+m.y)*0.01)*2;
+      const dir = -1; // face on left side as requested (tail to the right)
+      const headX = s.x; const headY = s.y + wig;
+      const bodyGreen = '#6fd94e';
+      const darkEdge  = '#3a742a';
+      const belly     = '#f1e58a';
+      // Draw segments from head to tail so tail follows behind
+      const segs = 4; const gap = m.r*0.78;
+      for(let i=0;i<segs;i++){
+        const px = headX - i*gap*dir;
+        const py = headY + Math.sin(t*3 + i*0.7)*1.8;
+        const rr = i===0? m.r*0.95 : m.r*0.85;
+        const g = ctx.createRadialGradient(px-8, py-8, 3, px+10, py+10, rr+16);
+        g.addColorStop(0,'#baff7a'); g.addColorStop(0.5, bodyGreen); g.addColorStop(1,'#2c4d1f');
+        ctx.fillStyle=g; ctx.strokeStyle=darkEdge; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.ellipse(px, py, rr, rr*0.72, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        if(i===1){
+          // belly oval and small forelimbs on second segment
+          ctx.fillStyle=belly; ctx.strokeStyle=shade(belly,0.35); ctx.lineWidth=1.8;
+          ctx.beginPath(); ctx.ellipse(px, py+rr*0.15, rr*0.6, rr*0.44, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+          ctx.fillStyle=shade(belly,0.15);
+          ctx.beginPath(); ctx.ellipse(px-rr*0.55, py+rr*0.05, 5, 3.6, 0.2, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(px+rr*0.55, py+rr*0.05, 5, 3.6, -0.2, 0, Math.PI*2); ctx.fill();
+        }
+      }
+      // Head details on first segment
+      // antennae
+      ctx.strokeStyle='#ffd24a'; ctx.lineWidth=4; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(headX-4, headY-m.r*0.8); ctx.quadraticCurveTo(headX-2, headY-m.r*1.2, headX-8, headY-m.r*1.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(headX+4, headY-m.r*0.8); ctx.quadraticCurveTo(headX+6, headY-m.r*1.2, headX+12, headY-m.r*1.5); ctx.stroke();
+      ctx.fillStyle='#ffef7a';
+      ctx.beginPath(); ctx.rect(headX-10, headY-m.r*1.55, 6, 6); ctx.fill();
+      ctx.beginPath(); ctx.rect(headX+8, headY-m.r*1.55, 6, 6); ctx.fill();
+      // eyes
+      // friendlier, cuter eyes (bigger whites, smaller pupils)
+      ctx.fillStyle='white'; ctx.beginPath(); ctx.arc(headX-6, headY-3.8, 5.6, 0, Math.PI*2); ctx.arc(headX+6, headY-2.4, 5.6, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle='#2a3d2a'; ctx.beginPath(); ctx.arc(headX-6, headY-3.8, 1.6, 0, Math.PI*2); ctx.arc(headX+6, headY-2.4, 1.6, 0, Math.PI*2); ctx.fill();
+      // smile
+      ctx.strokeStyle='#2a3d2a'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(headX-8, headY+4); ctx.quadraticCurveTo(headX, headY+6.5, headX+8, headY+4); ctx.stroke();
+      ctx.restore();
+    }
+    else if(m.type==='woopie'){
+      // Woopie — expressive chef-cat with apron and scarf
+      const t = (performance.now? performance.now(): Date.now())*0.001;
+      const bob = Math.sin(t*2.2 + (m.x+m.y)*0.02) * 1.2;
+      const phase = ((m.x*37 + m.y*17) % 1000) * 0.001;
+      const blinkOpen = (Math.sin(t*1.6 + phase) > 0.92) ? 0.18 : 1.0; // brief blink
+
+      const r = m.r;
+      const fur = '#c58a4a';
+      const furShadow = '#a06a35';
+      const innerEar = '#f3b3a1';
+      const eye = '#3b2b1a';
+      const scarf = '#d93a2e';
+      const apron = '#f7f6f3';
+      const apronShade = '#e9e6e0';
+
+      ctx.save();
+      ctx.translate(s.x, s.y + bob);
+
+      // tail (drawn behind body)
+      ctx.fillStyle = furShadow;
+      ctx.beginPath();
+      ctx.ellipse(-r*0.95, r*0.1, r*0.55, r*0.2, 0.25, 0, Math.PI*2);
+      ctx.fill();
+
+      // body
+      ctx.fillStyle = fur;
+      ctx.beginPath();
+      ctx.ellipse(0, 4, r+2, r*0.9, 0, 0, Math.PI*2);
+      ctx.fill();
+
+      // arms/paws
+      ctx.fillStyle = fur;
+      ctx.beginPath(); ctx.ellipse(-r*0.88, 0, r*0.28, r*0.18, -0.4, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse( r*0.88, 0, r*0.28, r*0.18,  0.4, 0, Math.PI*2); ctx.fill();
+
+      // apron with waist band and pocket
+      ctx.fillStyle = apron; ctx.beginPath(); ctx.ellipse(0, 6, r*0.92, r*0.62, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = apronShade; ctx.fillRect(-r*0.48, 0, r*0.96, 8);
+      ctx.fillStyle = apronShade; ctx.beginPath(); ctx.ellipse(0, 8, r*0.42, r*0.26, 0, 0, Math.PI*2); ctx.fill();
+
+      // scarf/kerchief
+      ctx.fillStyle = scarf;
+      ctx.beginPath(); ctx.moveTo(-r*0.7, -r*0.15); ctx.lineTo(0, r*0.05); ctx.lineTo(r*0.7, -r*0.15); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-r*0.18, r*0.05); ctx.lineTo(0, r*0.38); ctx.lineTo(r*0.2, r*0.05); ctx.closePath(); ctx.fill();
+
+      // head
+      ctx.fillStyle = fur; ctx.beginPath(); ctx.ellipse(0, -r*0.25, r*0.98, r*0.78, 0, 0, Math.PI*2); ctx.fill();
+      // ears
+      ctx.fillStyle = furShadow; ctx.beginPath(); ctx.moveTo(-r*0.9, -r*0.95); ctx.lineTo(-r*0.45, -r*0.45); ctx.lineTo(-r*1.05, -r*0.45); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo( r*0.9, -r*0.95); ctx.lineTo( r*0.45, -r*0.45); ctx.lineTo( r*1.05, -r*0.45); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = innerEar; ctx.beginPath(); ctx.moveTo(-r*0.86, -r*0.82); ctx.lineTo(-r*0.56, -r*0.52); ctx.lineTo(-r*0.98, -r*0.52); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo( r*0.86, -r*0.82); ctx.lineTo( r*0.56, -r*0.52); ctx.lineTo( r*0.98, -r*0.52); ctx.closePath(); ctx.fill();
+
+      // eyes (with blinking)
+      const erx = r*0.22, ery = r*0.26*blinkOpen;
+      ctx.fillStyle = 'white';
+      ctx.beginPath(); ctx.ellipse(-r*0.34, -r*0.42, erx, ery, 0, 0, Math.PI*2); ctx.ellipse(r*0.34, -r*0.42, erx, ery, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = eye; ctx.beginPath(); ctx.arc(-r*0.34, -r*0.42, r*0.08, 0, Math.PI*2); ctx.arc(r*0.34, -r*0.42, r*0.08, 0, Math.PI*2); ctx.fill();
+
+      // nose and mouth (open, happy)
+      ctx.fillStyle = '#7a3b21'; ctx.beginPath(); ctx.ellipse(0, -r*0.35, r*0.08, r*0.06, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#2a1512'; ctx.beginPath(); ctx.ellipse(0, -r*0.2, r*0.36, r*0.22*(0.9+Math.abs(bob)*0.06), 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#e87b78'; ctx.beginPath(); ctx.ellipse(0, -r*0.1, r*0.22, r*0.12, 0, 0, Math.PI*2); ctx.fill();
+
+      // whiskers and blush
+      ctx.strokeStyle = eye; ctx.lineWidth = 2; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(-r*0.24, -r*0.25); ctx.lineTo(-r*0.58, -r*0.32); ctx.moveTo(-r*0.24, -r*0.18); ctx.lineTo(-r*0.58, -r*0.18); ctx.moveTo(-r*0.24, -r*0.11); ctx.lineTo(-r*0.58, -r*0.04); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo( r*0.24, -r*0.25); ctx.lineTo( r*0.58, -r*0.32); ctx.moveTo( r*0.24, -r*0.18); ctx.lineTo( r*0.58, -r*0.18); ctx.moveTo( r*0.24, -r*0.11); ctx.lineTo( r*0.58, -r*0.04); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,122,122,0.35)'; ctx.beginPath(); ctx.ellipse(-r*0.6, -r*0.15, r*0.18, r*0.12, 0, 0, Math.PI*2); ctx.ellipse(r*0.6, -r*0.15, r*0.18, r*0.12, 0, 0, Math.PI*2); ctx.fill();
+
+      // chef hat with red band
+      ctx.fillStyle = '#e24b34'; ctx.fillRect(-r*0.32, -r*0.86, r*0.64, 6);
+      ctx.fillStyle = '#f3f1ee';
+      ctx.beginPath(); ctx.ellipse(0, -r*1.02, r*0.7, r*0.36, 0, 0, Math.PI*2); ctx.fill();
+
+      ctx.restore();
+    }
+    ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(s.x-18, s.y-m.r-12-(m.z||0)*0.4, 36, 5); ctx.fillStyle='#e55'; ctx.fillRect(s.x-18, s.y-m.r-12-(m.z||0)*0.4, 36*(m.hp/m.hpMax), 5);
     // Nameplate with difficulty color
     const mlv = getMobLevel(m); const diff = mlv - player.level; const di = getDiffInfo(diff);
     ctx.save(); ctx.textAlign='center'; ctx.textBaseline='alphabetic'; ctx.font='12px system-ui';
@@ -2467,11 +2875,13 @@ function genLuxem(){
     return m.boss? 14 : 6;
   }
   function getMobName(m){
-    if(m.type==='jellyking') return 'Jelly King';
+    if(m.type==='jellyking') return 'Jelly Bean King';
     if(m.type==='flanae') return 'Flaenae';
     if(m.type==='choropy') return 'Choropy';
     if(m.type==='woopie') return 'Woopie';
-    return (m.type||'mob').replace(/_/g,' ').replace(/^./, c=>c.toUpperCase());
+    const n = (m.type||'mob').replace(/_/g,' ').replace(/^./, c=>c.toUpperCase());
+    if(n==='Jelly') return 'Jelly Bean';
+    return n;
   }
   function getDiffInfo(diff){
     // Grey=unchallenging, green=easy, yellow=challenging, red=hard, purple=impossible
