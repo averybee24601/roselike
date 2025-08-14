@@ -1762,12 +1762,12 @@ Later patches (not in this edit):
     trainer.x = town.x + ring; trainer.y = town.y + TILE*0.6;
     storageNPC.x = town.x; storageNPC.y = town.y + ring;
     // Buildings behind each NPC (placed away from bonfire)
-    placeBld(sign.x, sign.y - TILE*2.2, 3, 2, {roof:'#3f7aa6'}); // bluish roof north
-    placeBld(merchant.x - TILE*2.8, merchant.y, 4, 3, {roof:'#a84f3c'}); // red roof west
+    placeBld(sign.x, sign.y - TILE*2.2, 3, 2, {roof:'#3f7aa6', banner:'#3f7aa6', sign:'info'}); // bluish roof north
+    placeBld(merchant.x - TILE*2.8, merchant.y, 4, 3, {roof:'#a84f3c', banner:'#c95a4a', sign:'shop'}); // red roof west
     placeStall(merchant.x - TILE*1.0, merchant.y - TILE*0.6, '#c95a4a');
-    placeBld(trainer.x + TILE*2.8, trainer.y, 4, 3, {roof:'#7aa63f'}); // green roof east
+    placeBld(trainer.x + TILE*2.8, trainer.y, 4, 3, {roof:'#7aa63f', banner:'#4a8ac9', sign:'trainer'}); // green roof east
     placeStall(trainer.x + TILE*1.0, trainer.y - TILE*0.6, '#4a8ac9');
-    placeBld(storageNPC.x, storageNPC.y + TILE*2.4, 4, 3, {roof:'#a68b3f'}); // ochre roof south
+    placeBld(storageNPC.x, storageNPC.y + TILE*2.4, 4, 3, {roof:'#a68b3f', banner:'#af964a', sign:'storage'}); // ochre roof south
     // Place a few standing stone pillars around the canyon for a proper "spawn ring"
     for(let k=0;k<6;k++){
       const a = (k/6)*Math.PI*2; const rr = canyon.r*0.85; const px = canyon.x + Math.cos(a)*rr; const py = canyon.y + Math.sin(a)*rr; decor.push({t:'pillar', x:px, y:py});
@@ -2595,17 +2595,21 @@ function genLuxem(){
     for(const d of decor){
       const s=worldToScreen(d.x,d.y); if(s.x<-50||s.y<-50||s.x>vw+50||s.y>vh+50) continue;
       if(d.t==='tree'){
-        // Trunk
-        ctx.fillStyle = '#7a5a3a';
-        ctx.fillRect(s.x-4, s.y-18, 8, 22);
-        ctx.fillStyle = 'rgba(0,0,0,0.15)';
-        ctx.fillRect(s.x-4, s.y-18, 8, 2);
-        // Layered canopy (ROSE-like round leaves, multi-tone)
-        const drawBlob=(dx,dy,r,col)=>{ ctx.fillStyle=col; ctx.beginPath(); ctx.arc(s.x+dx, s.y-22+dy, r, 0, Math.PI*2); ctx.fill(); };
-        drawBlob(0, 0, 22, '#2f6a43');
-        drawBlob(-10,-6,18, '#29613b');
-        drawBlob(12,-8,16, '#33724a');
-        drawBlob(-4,10,16, '#2a5d3d');
+        // Ground shadow
+        ctx.save(); ctx.globalAlpha=0.25; ctx.fillStyle='#000'; ctx.beginPath(); ctx.ellipse(s.x, s.y-2, 18, 10, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
+        // Trunk with subtle bark lines
+        const trunkW=8, trunkH=26; const x0=s.x-trunkW/2, y0=s.y-18-trunkH+26;
+        const bark='#7b5331'; const barkDark='#5b3e25';
+        const gradT = ctx.createLinearGradient(x0,0,x0+trunkW,0); gradT.addColorStop(0,barkDark); gradT.addColorStop(1,bark);
+        ctx.fillStyle = gradT; ctx.fillRect(x0, y0, trunkW, trunkH);
+        ctx.fillStyle='rgba(255,255,255,0.08)'; ctx.fillRect(x0+2,y0+2,trunkW-4,1);
+        ctx.fillStyle='rgba(0,0,0,0.15)'; ctx.fillRect(x0+1,y0+trunkH-3,trunkW-2,2);
+        // Layered canopy with lighting rim
+        const drawBlob=(dx,dy,r,col,light)=>{ ctx.fillStyle=col; ctx.beginPath(); ctx.arc(s.x+dx, s.y-26+dy, r, 0, Math.PI*2); ctx.fill(); if(light){ ctx.strokeStyle=light; ctx.globalAlpha=0.35; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(s.x+dx, s.y-26+dy, r-2, -0.3, 1.2); ctx.stroke(); ctx.globalAlpha=1; } };
+        drawBlob(0, 0, 24, '#2e6c43', '#7fd99b');
+        drawBlob(-12,-6,18, '#295d3b', '#6fcb8b');
+        drawBlob(12,-8,16, '#34764b', '#85e0a4');
+        drawBlob(-4,10,16, '#2c5e3f', '#6bd390');
       } else if(d.t==='rock'){
         ctx.fillStyle = (mapName==='zant'||mapName==='elverloon')? '#5b5242':'#3b4653';
         ctx.beginPath(); ctx.arc(s.x,s.y,10,0,6.28); ctx.fill();
@@ -2624,30 +2628,45 @@ function genLuxem(){
         ctx.strokeStyle='rgba(255,255,255,0.15)';
         for(let rr=r*0.25; rr<r; rr+=TILE*1.2){ ctx.beginPath(); ctx.arc(s.x, s.y, rr, 0, Math.PI*2); ctx.stroke(); }
       } else if(d.t==='bld'){
-        // ROSE AP-like clay/plaster buildings with colored roofs
+        // Stylized 2.5D buildings with shading, wood trim, banners, and signage
         const w=(d.w||TILE*4), h=(d.h||TILE*3);
         const x0=s.x - w/2, y0=s.y - h/2;
-        // walls (warm plaster)
-        ctx.fillStyle = d.wall || '#e8d2b0';
-        ctx.fillRect(x0, y0, w, h);
-        // door and lintel
-        const doorW= Math.max(16, Math.min(28, w*0.22));
-        ctx.fillStyle=d.door || '#6a4422'; ctx.fillRect(x0 + w/2 - doorW/2, y0 + h - 22, doorW, 20);
-        ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.fillRect(x0 + w/2 - doorW/2, y0 + h - 24, doorW, 3);
-        // roof (colored tile cap)
-        const roofH = Math.max(10, h*0.22);
+        // ground shadow
+        ctx.save(); ctx.globalAlpha=0.25; ctx.fillStyle='#000'; ctx.beginPath(); ctx.ellipse(s.x, y0+h, w*0.45, 12, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
+        // walls with vertical gradient to simulate depth
+        const wallCol = d.wall || '#e8d2b0';
+        const wallDark = '#c7b08b';
+        const g = ctx.createLinearGradient(x0, y0, x0, y0+h);
+        g.addColorStop(0, wallCol);
+        g.addColorStop(1, wallDark);
+        ctx.fillStyle = g; ctx.fillRect(x0, y0, w, h);
+        // wooden trim base
+        ctx.fillStyle = '#704a2b'; ctx.fillRect(x0, y0+h-6, w, 6);
+        // door with top arch highlight
+        const doorW= Math.max(18, Math.min(32, w*0.24));
+        const doorX = x0 + w/2 - doorW/2; const doorY = y0 + h - 24;
+        const dg = ctx.createLinearGradient(doorX, doorY, doorX, doorY+22);
+        dg.addColorStop(0,'#7b4f2f'); dg.addColorStop(1,'#5a3a22');
+        ctx.fillStyle=dg; ctx.fillRect(doorX, doorY, doorW, 22);
+        ctx.fillStyle='rgba(255,255,255,0.08)'; ctx.fillRect(doorX+3, doorY+3, doorW-6, 2);
+        // windows with glass shine
+        const win = (wx)=>{ const wy=y0+h*0.42; const ww=12, wh=10; ctx.fillStyle='#475a69'; ctx.fillRect(wx, wy, ww, wh); ctx.fillStyle='rgba(255,255,255,0.25)'; ctx.fillRect(wx+2, wy+2, ww-6, 2); };
+        win(x0+10); win(x0+w-22);
+        // roof with bevel + colored banner
+        const roofH = Math.max(12, h*0.23);
         const roofCol = d.roof || '#a84f3c';
-        ctx.fillStyle = roofCol;
-        ctx.fillRect(x0-2, y0-2, w+4, roofH+4);
-        // roof ridge pattern
-        ctx.fillStyle = 'rgba(255,255,255,0.10)';
-        for(let rx=x0; rx<x0+w; rx+=12){ ctx.fillRect(rx+4, y0+2, 6, 2); }
+        const rg = ctx.createLinearGradient(x0-2, y0-2, x0-2, y0-2+roofH+4);
+        rg.addColorStop(0, '#ffffff18'); rg.addColorStop(1, '#00000020');
+        ctx.fillStyle = roofCol; ctx.fillRect(x0-2, y0-2, w+4, roofH+4);
+        ctx.fillStyle = rg; ctx.fillRect(x0-2, y0-2, w+4, roofH+4);
+        // roof ridge detail
+        ctx.fillStyle = 'rgba(255,255,255,0.14)'; for(let rx=x0; rx<x0+w; rx+=10){ ctx.fillRect(rx+4, y0+1, 6, 2); }
+        // banner (color-coded personality)
+        if(d.banner){ const bw=18,bh=16; const bx=x0+w-26, by=y0+roofH+6; ctx.fillStyle=d.banner; ctx.fillRect(bx,by,bw,bh); ctx.fillStyle='rgba(0,0,0,0.15)'; ctx.fillRect(bx,by,bw,2); }
+        // hanging sign icon
+        if(d.sign){ const sx=x0+6, sy=y0+roofH+4; ctx.fillStyle='#6b4a2a'; ctx.fillRect(sx,sy,14,10); ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.fillRect(sx,sy,14,2); ctx.fillStyle='#ffd24a'; ctx.font='10px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; const label = d.sign==='shop'?'🛒': d.sign==='trainer'?'★': d.sign==='storage'?'🧳':'ℹ️'; ctx.fillText(label, sx+7, sy+6); }
         // outline
         ctx.strokeStyle='rgba(0,0,0,0.35)'; ctx.lineWidth=2; ctx.strokeRect(x0+0.5, y0+0.5, w-1, h-1);
-        // small windows
-        ctx.fillStyle = '#5b6b7a';
-        ctx.fillRect(x0+10, y0+roofH+8, 10, 10);
-        ctx.fillRect(x0+w-20, y0+roofH+8, 10, 10);
       } else if(d.t==='stall'){
         // Merchant/trainer canopy stall
         const w = d.w || TILE*2.2, h = d.h || TILE*1.2;
