@@ -565,6 +565,8 @@ Later patches (not in this edit):
   const tiles = new Array(MAP_W*MAP_H).fill(0); // 0 grass, 1 dirt, 2 water
   // Town guard zones: populated per-map; enemies may not enter
   const townZones = [];
+  // Plains-specific town center reference for spawn buffers
+  let plainsTownCenter = null;
   for(let y=0;y<MAP_H;y++){
     for(let x=0;x<MAP_W;x++){
       let idx=y*MAP_W+x;
@@ -1618,7 +1620,14 @@ Later patches (not in this edit):
     const countByType = {};
     for(const e of ents){ if(!e.alive) continue; countByType[e.type] = (countByType[e.type]|0) + 1; }
     const need=(type,target)=>{ const have=countByType[type]|0; const missing=Math.max(0,target-have); for(let i=0;i<missing;i++){ let tries=0; while(tries++<800){ const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0; const tt=tiles[y*MAP_W+x]; if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(type,wx,wy); break; } } } } };
-    if(mapName==='plains'){ need('jelly',16); need('choropy',12); }
+    if(mapName==='plains'){
+      // stronger buffers on plains to keep mobs away from canyon and town
+      const oldIsInTown = isInTown;
+      const guard = (wx,wy)=> oldIsInTown(wx,wy) || (dist(wx,wy,startPos.x,startPos.y)>TILE*26 && (!plainsTownCenter || dist(wx,wy,plainsTownCenter.x,plainsTownCenter.y)>TILE*20));
+      const oldSpawn = spawnMob;
+      const needGuarded=(type,target)=>{ const have=countByType[type]|0; const missing=Math.max(0,target-have); for(let i=0;i<missing;i++){ let tries=0; while(tries++<1200){ const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0; const tt=tiles[y*MAP_W+x]; if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(guard(wx,wy)){ oldSpawn(type,wx,wy); break; } } } } };
+      needGuarded('jelly',16); needGuarded('choropy',12);
+    }
     else if(mapName==='zant'){ need('woopie',26); }
     else if(mapName==='junon'){ need('moldy',40); need('moldy_elite',12); need('rockgolem',6); }
     else if(mapName==='elverloon'){ need('woopie',34); need('moldy_elite',12); need('rockgolem',6); }
@@ -1692,27 +1701,69 @@ Later patches (not in this edit):
       let g = (Math.sin(x*0.33)+Math.cos(y*0.27))*0.5 + Math.random()*0.6;
       tiles[i] = g>0.55?1:0;
     }
+    // Small creek far field for variation
     for(let y=20;y<28;y++) for(let x=20;x<28;x++){ if((x-24)**2+(y-24)**2<16) tiles[y*MAP_W+x]=2; }
     decor.length=0;
     for(let y=0;y<MAP_H;y++){ for(let x=0;x<MAP_W;x++){
       if(tiles[y*MAP_W+x]===0 && Math.random()>0.965) decor.push({t: Math.random()>0.6? 'tree':'rock', x:x*TILE+8+Math.random()*(TILE-16), y:y*TILE+8+Math.random()*(TILE-16)});
       if(tiles[y*MAP_W+x]===0 && Math.random()>0.985) decor.push({t:'flower', x:x*TILE+10+Math.random()*(TILE-20), y:y*TILE+10+Math.random()*(TILE-20)});
     }}
-    sign.x = TILE*6.5; sign.y = TILE*4.8; merchant.x = TILE*9.5; merchant.y = TILE*5.7; trainer.x = TILE*7.5; trainer.y = TILE*5.8; cartMaster.x = TILE*5.0; cartMaster.y = TILE*7.6; storageNPC.x = TILE*6.8; storageNPC.y = TILE*7.0;
-    // Define a circular safe town around the starting hub
+    // Canyon-like spawn (north), town with central bonfire to the south
+    const canyon = { x:startPos.x, y:startPos.y, r:TILE*5.2 };
+    // Canyon rim rocks
+    for(let k=0;k<22;k++){
+      const a = (k/22)*Math.PI*2; const rr = canyon.r + rand(-10,10);
+      const rx = canyon.x + Math.cos(a)*(rr+TILE*0.6);
+      const ry = canyon.y + Math.sin(a)*(rr+TILE*0.6);
+      decor.push({t:'rock', x:rx, y:ry});
+    }
+    // South path from canyon to town
+    const pathTx = Math.floor(canyon.x/TILE);
+    const pathTy0 = Math.floor(canyon.y/TILE)+3;
+    const townYTile = pathTy0 + 12;
+    for(let ty=pathTy0; ty<townYTile; ty++){
+      for(let dx=-1; dx<=1; dx++){
+        const tx = pathTx+dx; if(tx>1 && tx<MAP_W-1 && ty>1 && ty<MAP_H-1) tiles[ty*MAP_W+tx] = 1;
+      }
+    }
+    // Town center south of canyon
+    const town = { x: canyon.x, y: (townYTile)*TILE };
+    plainsTownCenter = {x: town.x, y: town.y};
+    decor.push({t:'bonfire', x:town.x, y:town.y});
+    // Plaza stone around bonfire
+    decor.push({t:'plaza', x:town.x, y:town.y, r:TILE*6.6});
+    // Buildings and stalls behind each NPC around the bonfire
+    const placeBld = (cx,cy,wTiles,hTiles,opts)=>{ const e={t:'bld', x:cx, y:cy, w:wTiles*TILE, h:hTiles*TILE}; if(opts){ Object.assign(e,opts);} decor.push(e); };
+    const placeStall = (cx,cy,col)=> decor.push({t:'stall', x:cx, y:cy, col});
+    const ring = TILE*2.4;
+    // NPC arrangement referencing ROSE AP hub (bonfire in center, NPCs around, with buildings behind)
+    sign.x = town.x; sign.y = town.y - ring;
+    merchant.x = town.x - ring; merchant.y = town.y + TILE*0.6;
+    trainer.x = town.x + ring; trainer.y = town.y + TILE*0.6;
+    storageNPC.x = town.x; storageNPC.y = town.y + ring;
+    cartMaster.x = town.x - TILE*3.6; cartMaster.y = town.y + TILE*2.6;
+    // Buildings behind each NPC (placed away from bonfire)
+    placeBld(sign.x, sign.y - TILE*2.2, 3, 2, {roof:'#3f7aa6'}); // bluish roof north
+    placeBld(merchant.x - TILE*2.8, merchant.y, 4, 3, {roof:'#a84f3c'}); // red roof west
+    placeStall(merchant.x - TILE*1.0, merchant.y - TILE*0.6, '#c95a4a');
+    placeBld(trainer.x + TILE*2.8, trainer.y, 4, 3, {roof:'#7aa63f'}); // green roof east
+    placeStall(trainer.x + TILE*1.0, trainer.y - TILE*0.6, '#4a8ac9');
+    placeBld(storageNPC.x, storageNPC.y + TILE*2.4, 4, 3, {roof:'#a68b3f'}); // ochre roof south
+    // Safe zones: canyon spawn and town circle — prevents Jelly Beans in both
     townZones.length = 0;
-    townZones.push({type:'circle', x:TILE*7.5, y:TILE*6.2, r:TILE*5.6});
+    townZones.push({type:'circle', x:canyon.x, y:canyon.y, r:canyon.r});
+    townZones.push({type:'circle', x:town.x, y:town.y, r:TILE*7.4});
     el('zone').textContent = MAPS.plains.label;
-    // Spawns: calmer for new players — mostly jellies in Plains
-    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1400){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
-    const spawnFar=(t,count,minDist)=>{let n=0,tries=0;while(n<count&&tries<1600){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy) && dist(wx,wy,startPos.x,startPos.y)>(minDist||TILE*22)){ spawnMob(t,wx,wy); n++; }}}};
-    // Very light jelly presence near town
+    // Spawns outside safe zones
+    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<2200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy) && dist(wx,wy,startPos.x,startPos.y)>TILE*26 && (!plainsTownCenter || dist(wx,wy,plainsTownCenter.x,plainsTownCenter.y)>TILE*20)){ spawnMob(t,wx,wy); n++; }}}};
+    const spawnFar=(t,count,minDist)=>{let n=0,tries=0;while(n<count&&tries<2400){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; const md=(minDist||TILE*28); if(!isInTown(wx,wy) && dist(wx,wy,startPos.x,startPos.y)>md && (!plainsTownCenter || dist(wx,wy,plainsTownCenter.x,plainsTownCenter.y)>TILE*22)){ spawnMob(t,wx,wy); n++; }}}};
+    // Jelly Beans only outside town/canyon
     spawnOut('jelly',18);
-    // Choropy ring appears further out around the hub
+    // Choropy ring further out
     spawnFar('choropy',16, TILE*22);
-    // Plains portal to Breezy 3–8 zone (Luxem Forest)
+    // Portal away from canyon and town (west road)
     portals.length = 0;
-    portals.push({kind:'npc', npc:'portal', x: TILE*2, y: startPos.y, r:22, dest:'luxem', tag:'grove'});
+    portals.push({kind:'npc', npc:'portal', x: town.x - TILE*12, y: town.y, r:22, dest:'luxem', tag:'grove'});
     // If story quest is at travel step to Luxem, mark it complete on arrival there (handled on map change)
   }
   function genJunon(){
@@ -2484,6 +2535,16 @@ function genLuxem(){
             ctx.fillStyle = 'rgba(0,0,0,0.07)';
             const wave = 10; const amp=1.6; const y0 = py + TILE*0.65;
             for(let xx=px; xx<px+TILE; xx+=wave){ const yy = y0 + Math.sin((xx*0.18)) * amp; ctx.fillRect(xx, Math.round(yy), wave-3, 2); }
+          } else if(mapName==='plains'){
+            // ROSE AP-style packed earth with light stone flecks
+            const g = ctx.createLinearGradient(0, py, 0, py+TILE);
+            g.addColorStop(0, '#b08c53'); g.addColorStop(1, '#967646');
+            ctx.fillStyle = g; ctx.fillRect(px,py,TILE,TILE);
+            // subtle flecks and seams
+            ctx.fillStyle = 'rgba(255,255,255,0.06)';
+            for(let i=0;i<2;i++){ ctx.fillRect(px+6+i*18, py+4, 4, TILE-8); }
+            ctx.fillStyle = 'rgba(0,0,0,0.08)';
+            const dots=6; for(let i=0;i<dots;i++){ const dx=px+4+Math.random()*(TILE-8), dy=py+4+Math.random()*(TILE-8); ctx.fillRect(dx,dy,1,1); }
           } else {
             ctx.fillStyle = '#6d5a35'; ctx.fillRect(px,py,TILE,TILE);
             ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth=1; ctx.strokeRect(px+0.5,py+0.5,TILE-1,TILE-1);
@@ -2512,6 +2573,74 @@ function genLuxem(){
       } else if(d.t==='rock'){
         ctx.fillStyle = (mapName==='zant'||mapName==='elverloon')? '#5b5242':'#3b4653';
         ctx.beginPath(); ctx.arc(s.x,s.y,10,0,6.28); ctx.fill();
+      } else if(d.t==='plaza'){
+        // Circular stone plaza floor around bonfire
+        const r = d.r || TILE*6;
+        const steps = 18; // radial seams
+        // base disk
+        const grad = ctx.createRadialGradient(s.x,s.y, r*0.1, s.x,s.y, r);
+        grad.addColorStop(0,'#d8c8a6'); grad.addColorStop(1,'#b8a782');
+        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI*2); ctx.fill();
+        // radial seams
+        ctx.strokeStyle = 'rgba(100,80,50,0.25)'; ctx.lineWidth=1;
+        for(let i=0;i<steps;i++){ const a=(i/steps)*Math.PI*2; ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x+Math.cos(a)*r, s.y+Math.sin(a)*r); ctx.stroke(); }
+        // ring seams
+        ctx.strokeStyle='rgba(255,255,255,0.15)';
+        for(let rr=r*0.25; rr<r; rr+=TILE*1.2){ ctx.beginPath(); ctx.arc(s.x, s.y, rr, 0, Math.PI*2); ctx.stroke(); }
+      } else if(d.t==='bld'){
+        // ROSE AP-like clay/plaster buildings with colored roofs
+        const w=(d.w||TILE*4), h=(d.h||TILE*3);
+        const x0=s.x - w/2, y0=s.y - h/2;
+        // walls (warm plaster)
+        ctx.fillStyle = d.wall || '#e8d2b0';
+        ctx.fillRect(x0, y0, w, h);
+        // door and lintel
+        const doorW= Math.max(16, Math.min(28, w*0.22));
+        ctx.fillStyle=d.door || '#6a4422'; ctx.fillRect(x0 + w/2 - doorW/2, y0 + h - 22, doorW, 20);
+        ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.fillRect(x0 + w/2 - doorW/2, y0 + h - 24, doorW, 3);
+        // roof (colored tile cap)
+        const roofH = Math.max(10, h*0.22);
+        const roofCol = d.roof || '#a84f3c';
+        ctx.fillStyle = roofCol;
+        ctx.fillRect(x0-2, y0-2, w+4, roofH+4);
+        // roof ridge pattern
+        ctx.fillStyle = 'rgba(255,255,255,0.10)';
+        for(let rx=x0; rx<x0+w; rx+=12){ ctx.fillRect(rx+4, y0+2, 6, 2); }
+        // outline
+        ctx.strokeStyle='rgba(0,0,0,0.35)'; ctx.lineWidth=2; ctx.strokeRect(x0+0.5, y0+0.5, w-1, h-1);
+        // small windows
+        ctx.fillStyle = '#5b6b7a';
+        ctx.fillRect(x0+10, y0+roofH+8, 10, 10);
+        ctx.fillRect(x0+w-20, y0+roofH+8, 10, 10);
+      } else if(d.t==='stall'){
+        // Merchant/trainer canopy stall
+        const w = d.w || TILE*2.2, h = d.h || TILE*1.2;
+        const x0=s.x - w/2, y0=s.y - h/2;
+        // posts
+        ctx.fillStyle = '#7a5a32';
+        ctx.fillRect(x0+4, y0, 4, h);
+        ctx.fillRect(x0+w-8, y0, 4, h);
+        // canopy
+        const col = d.col || '#c95a4a';
+        ctx.fillStyle = col; ctx.fillRect(x0, y0-6, w, 12);
+        ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(x0+6, y0-4, w-12, 4);
+      } else if(d.t==='bonfire'){
+        // Central bonfire with animated flame and glow
+        const t = performance.now()/1000;
+        const bob = Math.sin(t*6 + (d.x+d.y)*0.01)*2;
+        // base stones
+        ctx.fillStyle='#3a2c12'; ctx.beginPath(); ctx.ellipse(s.x, s.y+6, 18, 10, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle='#4a3920'; ctx.beginPath(); ctx.ellipse(s.x-10, s.y+8, 6, 4, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(s.x+10, s.y+7, 6, 4, 0, 0, Math.PI*2); ctx.fill();
+        // flame core
+        const grd = ctx.createRadialGradient(s.x, s.y-6+bob, 4, s.x, s.y-6+bob, 18);
+        grd.addColorStop(0,'rgba(255,230,140,0.95)');
+        grd.addColorStop(0.5,'rgba(255,160,60,0.75)');
+        grd.addColorStop(1,'rgba(255,120,40,0)');
+        ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(s.x, s.y-6+bob, 18, 0, Math.PI*2); ctx.fill();
+        // flame body
+        ctx.fillStyle='#ffa24a'; ctx.beginPath(); ctx.ellipse(s.x, s.y-6+bob, 8, 14, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle='#ffd24a'; ctx.beginPath(); ctx.ellipse(s.x, s.y-10+bob, 5, 8, 0, 0, Math.PI*2); ctx.fill();
       } else if(d.t==='cactus'){
         // simple saguaro
         ctx.fillStyle='#3f7d3a';
