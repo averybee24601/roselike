@@ -340,7 +340,6 @@ Later patches (not in this edit):
       </div>
     </div>
   </div>
-
   <div class="window" id="charWin">
     <button class="close" id="charClose">✕</button>
     <h2>Character <span class="pill">Alt+C</span></h2>
@@ -642,7 +641,8 @@ Later patches (not in this edit):
     fairy_wings:{name:'Fairy Wings', type:'gear', slot:'wings', speed:90, style:'fairy', price:150, ilvl:4, reqLv:4},
     // Extra travel scrolls
     zant_scroll:{name:'Return Scroll: Zant', type:'consumable', teleport:'zant', spawnTag:'plaza', price:0},
-    elver_scroll:{name:'Return Scroll: El Verloon Desert', type:'consumable', teleport:'elverloon', spawnTag:'oasis', price:0}
+    elver_scroll:{name:'Return Scroll: El Verloon Desert', type:'consumable', teleport:'elverloon', spawnTag:'oasis', price:0},
+    eldeon_scroll:{name:'Return Scroll: Eldeon Glade', type:'consumable', teleport:'eldeon', spawnTag:'gate', price:0}
   };
   // Gem items (slot: gem) — set all shop prices to 500 gold
   Object.assign(ITEM_DB, {
@@ -657,7 +657,7 @@ Later patches (not in this edit):
   const SHOP_STOCK_HIGH=['potion_hp','potion_mp','iron_sword','composite_bow','fine_katar','battle_staff','mystic_wand','steel_armor','swift_boots','power_candy','angel_wings','dragon_worm_wings','mechanical_wings','feather_wings','helmet_knight','ring_gold','cloak_royal','wood_2h_sword'];
 
   // Map → allowed item-level range for shop/drops
-  const MAP_ITEM_LEVELS = { plains:[1,5], zant:[5,10], elverloon:[5,15], junon:[15,20], canyon:[20,30], luna:[30,40] };
+  const MAP_ITEM_LEVELS = { plains:[1,5], zant:[5,10], elverloon:[5,15], junon:[15,20], canyon:[20,30], luna:[30,40], eldeon:[40,50] };
   function itemAllowedInMap(it){
     if(!it) return false;
     if(it.type !== 'gear') return true; // consumables etc always allowed
@@ -670,7 +670,6 @@ Later patches (not in this edit):
     const base = (mapName==='plains')? SHOP_STOCK_BASE : (mapName==='junon'? (player.level>=10? SHOP_STOCK_HIGH : SHOP_STOCK_MID) : SHOP_STOCK_MID);
     return base.filter(id=> itemAllowedInMap(ITEM_DB[id]));
   }
-
   // Item icon inline SVG (minimal, readable)
   function getItemIconSVG(id){
     const it = ITEM_DB[id];
@@ -732,6 +731,13 @@ Later patches (not in this edit):
       // gem socket bonus (weapon/armor/wings/shield)
       if(it.socket && ITEM_DB[it.socket] && ITEM_DB[it.socket].bonus){ const g=ITEM_DB[it.socket].bonus; if(g.str) atk+=g.str; if(g.dex) speed+=g.dex*3; if(g.int) mpMax = (mpMax||player.mpMax) + g.int*2; if(g.con) player.defBase += g.con; }
     }
+    // Set bonuses (2pc/3pc) example for iron/steel tier
+    const equipped = Object.values(player.eq).filter(Boolean);
+    const countOf = (arr)=> arr.filter(id=>equipped.includes(id)).length;
+    const junonSet = ['iron_sword','steel_armor','helmet_knight'];
+    const nJunon = countOf(junonSet);
+    if(nJunon>=2){ atk += 6; }
+    if(nJunon>=3){ player.defBase = (player.defBase|0) + 10; }
     // Gem items exist but are not equippable by players
     // Derived defenses and rates
     let def = player.defBase||0, mdef = player.mdefBase||0, acc = player.accBase||0.78, critAdd = 0;
@@ -845,7 +851,8 @@ Later patches (not in this edit):
       const actions=document.createElement('div'); const btn=document.createElement('button'); btn.textContent='Buy'; btn.onclick=()=>{ if(player.gold>=it.price){ player.gold-=it.price; addToInv(id,1); shopGold.textContent=player.gold|0; goldEl.textContent=player.gold|0; notify('Purchased '+it.name); } else notify('Not enough gold'); };
       actions.appendChild(btn); shopList.appendChild(div); shopList.appendChild(actions);
     });
-    const lbl = (mapName==='plains')? 'Adventure Plains' : (mapName==='zant'? 'Zant' : (mapName==='junon'? 'Junon Polis' : (mapName==='elverloon'? 'El Verloon Desert' : 'Merchant')));
+    const lblMap = {plains:'Adventure Plains', zant:'Zant', junon:'Junon Polis', elverloon:'El Verloon Desert', luxem:'Luxem Forest', canyon:'Gorge Canyon', luna:'Luna', eldeon:'Eldeon Glade'};
+    const lbl = lblMap[mapName] || 'Merchant';
     const range = MAP_ITEM_LEVELS[mapName] || [1, MAX_LEVEL];
     const shopMapLabel = document.getElementById('shopMapLabel'); if(shopMapLabel) shopMapLabel.textContent = `${lbl} Shop (Lv ${range[0]}–${range[1]})`;
     shopWin.style.display='block'; shopList.scrollTop=0; ttsSay('Hello fellow rosarian, i have some items that may help ease your journey'); }
@@ -896,6 +903,7 @@ Later patches (not in this edit):
       notify('New bounty accepted: Golems'); save(); }
     else if(mapName==='luxem'){ qIndex = quests.findIndex(q=>q.id===10); if(qIndex<0){ quests.push({id:10, title:'Zant Bounty: Choropy', line:'Defeat 12 Choropys around Luxem and Zant outskirts.', need:12, type:'choropy', prog:0, done:false, reward:{xp:260,gold:240}}); qIndex = quests.length-1; }
       notify('New bounty accepted: Choropy Hunt'); save(); }
+    else if(mapName==='eldeon'){ qIndex = quests.findIndex(q=>q.id===41); if(qIndex<0){ quests.push({id:41, title:'Eldeon Hunt', line:'Defeat 10 Eldeon foes (Spirit Archers or Thornlings).', need:10, type:'eldeon_kill', prog:0, done:false, reward:{xp:800,gold:700}}); qIndex = quests.length-1; } notify('New bounty accepted: Eldeon Hunt'); save(); }
     updateQuestText();
   }
 
@@ -1003,7 +1011,6 @@ Later patches (not in this edit):
       {id:'turret', name:'Auto-Turret', icon:'🔧', cd:14, mp:18, use:()=>deployTurret(), desc:'Deploy a temporary turret.', req:{wep:null}}
     ]
   };
-
   // QoL: Reset Stats item and handler
   ITEM_DB.reset_scroll = { name:'Reset Scroll', type:'consumable', price: 60, desc:'Refunds all spent stat points' };
   SHOP_STOCK_BASE.push('reset_scroll');
@@ -1105,7 +1112,14 @@ Later patches (not in this edit):
     // Weapon requirement check
     if(s.req && s.req.wep){ const wepType=getEquippedWeaponType(); if(wepType!==s.req.wep){ notify(`${s.name} requires a ${s.req.wep.toUpperCase()}`); return; } }
     if(player.mp < s.mp) return notify('Not enough MP');
-    player.mp-=s.mp; s.use(); player.skillCd[slot]=s.cd; scds[slot].style.display='grid';
+    player.mp-=s.mp;
+    // Simple synergy: Poisoned targets take +20% from Flurry
+    const hadPoison = player.buffs.some(b=>b.poisonTag);
+    s.use();
+    if(s.id==='flurry' && hadPoison){
+      for(const m of ents){ if(!m.alive) continue; if(dist(player.x,player.y,m.x,m.y)<70){ const out=calcDamage(player.atk*0.2,'physical'); m.hp-=out.dmg; showDamage(m.x,m.y,out.dmg,out.crit,'physical'); if(m.hp<=0){ m.alive=false; onMobKilled(m);} } }
+    }
+    player.skillCd[slot]=s.cd; scds[slot].style.display='grid';
   }
 
   // Stat scaling (STR/DEX/INT/SEN/CON)
@@ -1165,7 +1179,8 @@ Later patches (not in this edit):
       setTimeout(()=>{
         angle += Math.PI/3;
         // Freeze + damage
-        for(const m of ents){ if(!m.alive) continue; const d=dist(player.x,player.y,m.x,m.y); if(d<radius){ const out=calcDamage(player.atk*1.1,'magic'); m.hp-=out.dmg; showDamage(m.x,m.y,out.dmg,out.crit,'magic'); m.hurt=0.2; m.speed = Math.max(20, (m.speed||90)*0.35); if(m.hp<=0){ m.alive=false; onMobKilled(m);} } }
+        for(const m of ents){ if(!m.alive) continue; const d=dist(player.x,player.y,m.x,m.y); if(d<radius){ const out=calcDamage(player.atk*1.1,'magic'); m.hp-=out.dmg; showDamage(m.x,m.y,out.dmg,out.crit,'magic'); m.hurt=0.2; m.speed = Math.max(20, (m.speed||90)*0.35); if(m.hp<=0){ m.alive=false; onMobKilled(m);} }
+        }
         fx.push({t:0.22, kind:'wind', x:player.x, y:player.y, r:radius, a:angle}); vibrate(10); Sfx.play('cast');
       }, i*tickMs);
     }
@@ -1253,6 +1268,12 @@ Later patches (not in this edit):
     if(type==='rockgolem'){ Object.assign(base,{r:26,speed:60,hp:420,hpMax:420,atk:30, golem:true}); }
     if(type==='choropy'){ Object.assign(base,{r:18,speed:130,hp:60,hpMax:60,atk:10}); }
     if(type==='woopie'){ Object.assign(base,{r:20,speed:100,hp:80,hpMax:80,atk:12}); }
+    if(type==='gorge_beetle'){ Object.assign(base,{r:16,speed:120,hp:140,hpMax:140,atk:22}); }
+    if(type==='luna_wolf'){ Object.assign(base,{r:20,speed:140,hp:200,hpMax:200,atk:26}); }
+    if(type==='luna_spirit'){ Object.assign(base,{r:18,speed:90,hp:160,hpMax:160,atk:24, flyer:true}); }
+    if(type==='spirit_archer'){ Object.assign(base,{r:18,speed:100,hp:260,hpMax:260,atk:28, ranged:true}); }
+    if(type==='thornling'){ Object.assign(base,{r:20,speed:110,hp:300,hpMax:300,atk:30, dashy:true}); }
+    if(type==='ancient_treant'){ Object.assign(base,{r:30,speed:65,hp:900,hpMax:900,atk:38, boss:true, treant:true}); }
     ents.push(base); return base;
   }
 
@@ -1270,17 +1291,28 @@ Later patches (not in this edit):
   const merchant = {kind:'npc', npc:'merchant', x:startPos.x+TILE*5.5, y:startPos.y- TILE*0.3, r:22};
   const trainer = {kind:'npc', npc:'trainer', x:startPos.x+TILE*3.8, y:startPos.y+ TILE*0.4, r:22};
   const cartMaster = {kind:'npc', npc:'cartmaster', x:startPos.x+TILE*0.8, y:startPos.y+ TILE*1.8, r:24};
-  const storageNPC = {kind:'npc', npc:'storage', x:startPos.x+TILE*6.8, y:startPos.y+ TILE*1.0, r:22};
+  const storageNPC = {kind:'npc', npc:'trainer', x:startPos.x+TILE*6.8, y:startPos.y+ TILE*1.0, r:22};
     // Boat NPC in plains is static object; ferryJ is placed in genJunon
 
-  // Quests
+  // Quests — Story progression + bounties
   const quests=[
+    // Story: Plains intro → Luxem travel → Luxem kills → Reach Lv10 for Zant → Zant kills → Reach Lv15 for Junon
     {id:0, title:'Meet the Plains', line:'Welcome! Interact with the wooden signpost.', need:0, type:'talk', done:false, reward:{xp:30,gold:40, items:[['potion_hp',2]]}},
-    {id:1, title:'Jelly Bean Cleanup', line:'Defeat 10 Jelly Beans', need:10, type:'jelly', prog:0, done:false, reward:{xp:90,gold:120, items:[['potion_hp',2]]}},
-    {id:2, title:'Pumpkin Patrol', line:'Defeat 6 Pumpkinlings', need:6, type:'pumpkin', prog:0, done:false, reward:{xp:160,gold:160, items:[['potion_mp',2]]}},
-    {id:3, title:'Cart License', line:'Talk to the Cart Master (🛞). Complete his task to earn your license.', need:1, type:'cartquest', prog:0, done:false, reward:{xp:100,gold:80, items:[['cart_pass',1]]}},
-    {id:4, title:'Plains Protector', line:'Reach Level 10 then pick a Job with the Trainer (★).', need:10, type:'level', done:false, reward:{xp:240,gold:240, items:[['wood_staff',1],['wood_katar',1],['wood_wand',1]]}},
-    // Map bounty quests (repeatable light bounties)
+    {id:0.5, title:'Basic Combat', line:'Defeat 5 Jelly Blobs to practice.', need:5, type:'jelly', prog:0, done:false, reward:{xp:50,gold:40}},
+    {id:1, title:'Path to Luxem', line:'Find the portal (🌀) at the far left of Adventure Plains and travel to Luxem Forest.', need:1, type:'travel', to:'luxem', done:false, reward:{xp:60,gold:60}},
+    {id:2, title:'Breezy Hunt', line:'In Luxem Forest, defeat 10 Choropys to learn the ropes.', need:10, type:'choropy', prog:0, done:false, reward:{xp:140,gold:120, items:[['potion_mp',2]]}},
+    {id:2.5, title:"Herbalist's Pouch", line:'Fetch the lost pouch near the creek in Luxem. Return to the sign.', need:1, type:'fetch_pouch', prog:0, done:false, reward:{xp:120,gold:100}},
+    {id:3, title:'Ready for Zant', line:"Reach Level 10. Then use Luxem's portal to travel to Zant.", need:10, type:'level', done:false, reward:{xp:200,gold:160}},
+    {id:4, title:'Zant Skirmish', line:'Defeat 10 Woopies around the outskirts of Zant.', need:10, type:'woopie', prog:0, done:false, reward:{xp:240,gold:240}},
+    {id:4.5, title:'Woopie Drums', line:'Defeat the Elite Woopie drummer near Zant.', need:1, type:'woopie_elite', prog:0, done:false, reward:{xp:260,gold:260, items:[['ring_silver',1]]}},
+    {id:5, title:'March to Junon', line:'Reach Level 15. Travel onward through El Verloon Desert to Junon Polis.', need:15, type:'level', done:false, reward:{xp:320,gold:320}},
+    {id:5.5, title:'Golem Core', line:'Hunt the Golem Mini-Boss and bring back its core.', need:1, type:'golem_core', prog:0, done:false, reward:{xp:380,gold:360, items:[['s7',1]]}},
+    {id:6, title:'Gate Trial', line:'Complete the city gate trial waves in Junon.', need:1, type:'gate_trial', prog:0, done:false, reward:{xp:420,gold:380}},
+    // Late-game arc: Luna → Eldeon
+    {id:40, title:'Arrival: Eldeon', line:'Travel from Luna to Eldeon Glade.', need:1, type:'travel', to:'eldeon', done:false, reward:{xp:600,gold:500}},
+    {id:41, title:'Eldeon Hunt', line:'Defeat 10 Eldeon foes (Spirit Archers or Thornlings).', need:10, type:'eldeon_kill', prog:0, done:false, reward:{xp:800,gold:700}},
+    {id:42, title:'Eldeon Guardian', line:'Defeat the Ancient Treant guarding the glade.', need:1, type:'ancient_treant', prog:0, done:false, reward:{xp:1200,gold:900, items:[['cloak_royal',1]]}},
+    // Bounties (optional, light repeatables)
     {id:10, title:'Zant Bounty: Choropy', line:'Defeat 12 Choropys around Luxem and Zant outskirts.', need:12, type:'choropy', prog:0, done:false, reward:{xp:260,gold:240}},
     {id:11, title:'Junon Bounty: Moldy', line:'Defeat 10 Moldy Spores near the city.', need:10, type:'moldy', prog:0, done:false, reward:{xp:340,gold:300}},
     {id:12, title:'El Verloon Bounty: Golems', line:'Defeat 6 Rock Golems in the dunes.', need:6, type:'rockgolem', prog:0, done:false, reward:{xp:520,gold:420}}
@@ -1298,7 +1330,7 @@ Later patches (not in this edit):
   addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); keys[k]=true; if(e.key===' '){e.preventDefault();}
     if(e.altKey && ((e.key==='S'||k==='s') || (e.key==='A'||k==='a'))){ if(typeof openSkills==='function') openSkills(); }
     if(e.altKey && (e.key==='M' || k==='m')){ if(shopWin.style.display==='block'){ shopWin.style.display='none'; } else { openShop(); } }
-    if(e.altKey && (e.key==='L' || k==='l')){ if(storageWin.style.display==='block'){ storageWin.style.display='none'; } else { openStorage(); } }
+    // Alt+L previously opened Storage; keep as is for now (Trainer change is Plains NPC only)
     if(e.altKey && (e.key==='J' || k==='j')){ openJobGuide(); }
     if(e.altKey && (e.key==='C' || k==='c')){ if(charWin && charWin.style.display==='block'){ closeCharacter(); } else { openCharacter(); } }
     if(e.altKey && (e.key==='P' || k==='p')){ openParty(); }
@@ -1334,7 +1366,6 @@ Later patches (not in this edit):
   if(ccBackBtn){ ccBackBtn.onclick = ()=>{ hideCreate(); showOverlay(); }; }
   el('continue').onclick=()=>{ if(load()) { hideOverlay(); recalcStats(); setSkillsForJob(player.job); } else { startNew(); hideOverlay(); } };
   el('erase').onclick=()=>{ erase(); notify('Save erased'); };
-
   function hideOverlay(){ overlay.style.display='none'; }
   function showOverlay(){ overlay.style.display='grid'; }
   function showCreate(){
@@ -1543,9 +1574,10 @@ Later patches (not in this edit):
   let mapName = 'plains';
   let transition = {a:0,to:null};
 
-  const harbor  = {kind:'npc', npc:'harbor', x: TILE*12.0, y: TILE*9.6,  r:26};  // plains dock (now to Zant)
-  const ferryJ  = {kind:'npc', npc:'ferryJ', x: TILE*44.0, y: TILE*58.0, r:26};  // junon dock (unused travel now)
-  let ferryCost = 60;
+  // Removed boat travel NPCs in favor of portal-based progression
+  // const harbor  = {kind:'npc', npc:'harbor', x: TILE*12.0, y: TILE*9.6,  r:26};
+  // const ferryJ  = {kind:'npc', npc:'ferryJ', x: TILE*44.0, y: TILE*58.0, r:26};
+  // let ferryCost = 60;
 
   const MAPS = {
     plains: { label:'Adventure Plains', gen: genPlains,  spawn:{main:{x: TILE*4, y: TILE*6}} },
@@ -1554,7 +1586,8 @@ Later patches (not in this edit):
     elverloon:{ label:'El Verloon Desert', gen: genElVerloon, spawn:{oasis:{x:TILE*54, y:TILE*24}, dune:{x:TILE*18, y:TILE*48}} },
     luxem: { label:'Luxem Forest', gen: genLuxem, spawn:{grove:{x:TILE*28,y:TILE*22}, path:{x:TILE*10,y:TILE*36}} },
     canyon: { label:'Gorge Canyon', gen: genCanyon, spawn:{rim:{x:TILE*28,y:TILE*14}, basin:{x:TILE*52,y:TILE*48}} },
-    luna: { label:'Luna', gen: genLuna, spawn:{landing:{x:TILE*22,y:TILE*20}, ridge:{x:TILE*40,y:TILE*36}} }
+    luna: { label:'Luna', gen: genLuna, spawn:{landing:{x:TILE*22,y:TILE*20}, ridge:{x:TILE*40,y:TILE*36}} },
+    eldeon: { label:'Eldeon Glade', gen: genEldeon, spawn:{grove:{x:TILE*24,y:TILE*20}, heart:{x:TILE*42,y:TILE*36}} }
   };
 
   function saveMeta(){ try{ localStorage.setItem('ap-meta', JSON.stringify({mapName})); }catch(e){} }
@@ -1567,6 +1600,12 @@ Later patches (not in this edit):
         mapName = next; softResetRuntime(); MAPS[mapName].gen(); ensureBaselineSpawns();
         const sp = MAPS[mapName].spawn[spawnTag] || Object.values(MAPS[mapName].spawn)[0];
         player.x = sp.x; player.y = sp.y; saveMeta(); transition.to=null;
+        // Story quest auto-advancers for travel milestones
+        const q = quests[qIndex];
+        if(q && q.type==='travel'){
+          const dest = q.to || '';
+          if(dest === mapName){ q.done = true; notify('Quest updated: '+q.title); if(qIndex < quests.length-1) qIndex++; save(); }
+        }
       }
     } else { transition.a -= 0.06; if(transition.a<0) transition.a=0; }
     ctx.save(); ctx.globalAlpha = Math.min(1,Math.max(0,transition.a)); ctx.fillStyle='#000'; ctx.fillRect(0,0,vw,vh); ctx.restore();
@@ -1583,21 +1622,13 @@ Later patches (not in this edit):
     else if(mapName==='zant'){ need('woopie',26); }
     else if(mapName==='junon'){ need('moldy',40); need('moldy_elite',12); need('rockgolem',6); }
     else if(mapName==='elverloon'){ need('woopie',34); need('moldy_elite',12); need('rockgolem',6); }
-    else if(mapName==='luxem'){ need('choropy',28); }
+     else if(mapName==='luxem'){ need('choropy',28); }
     else if(mapName==='canyon'){ need('rockgolem',16); need('gorge_beetle',24); }
     else if(mapName==='luna'){ need('luna_wolf',26); need('luna_spirit',16); }
+    else if(mapName==='eldeon'){ need('spirit_archer',22); need('thornling',26); need('ancient_treant',1); }
   }
 
-  function interactHarbor(){
-    if(mapName==='plains'){
-      if((player.gold|0) < ferryCost){ notify(`Boat fare is ${ferryCost}✦`); return; }
-      player.gold -= ferryCost; notify('Traveling to Zant…'); changeMap('zant','plaza'); save();
-    } else if(mapName==='zant'){
-      const back = Math.floor(ferryCost*0.5);
-      if((player.gold|0) < back){ notify(`Return fare is ${back}✦`); return; }
-      player.gold -= back; notify('Returning to Adventure Plains…'); changeMap('plains','main'); save();
-    }
-  }
+  // Boat travel removed
 
   function drawBoatNPC(obj){
     const s=worldToScreen(obj.x,obj.y);
@@ -1641,7 +1672,7 @@ Later patches (not in this edit):
     ctx.restore();
     // nameplate + interaction hint
     ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.font='12px system-ui';
-    const label = n.npc==='merchant'? 'Merchant' : n.npc==='storage'? 'Storage' : n.npc==='cartmaster'? 'Cart Master' : n.npc==='trainer'? 'Smith' : n.npc==='sign'? 'Quest' : (n.npc==='harbor'||n.npc==='ferryJ')? 'Travel Boat' : n.npc==='portal'? 'Portal' : '';
+    const label = n.npc==='merchant'? 'Merchant' : n.npc==='storage'? 'Storage' : n.npc==='cartmaster'? 'Cart Master' : n.npc==='trainer'? 'Trainer' : n.npc==='sign'? 'Quest' : (n.npc==='harbor'||n.npc==='ferryJ')? 'Travel Boat' : n.npc==='portal'? 'Portal' : '';
     if(label){ ctx.save(); ctx.textAlign='center'; ctx.textBaseline='alphabetic'; ctx.strokeStyle='rgba(0,0,0,0.55)'; ctx.lineWidth=4; ctx.strokeText(label, s.x, s.y-30); ctx.fillStyle='#cfe'; ctx.fillText(label, s.x, s.y-30); ctx.restore(); }
     const hint = (n.npc==='harbor'||n.npc==='ferryJ')? '⛵ E' : (n.npc==='portal'? '🌀 E' : 'E');
     ctx.fillText(hint, s.x, s.y-20);
@@ -1649,7 +1680,6 @@ Later patches (not in this edit):
   function drawNPCSprites(){
     const list=[sign, merchant, trainer, storageNPC, cartMaster];
     if(summonedCart) list.push(summonedCart);
-    if(mapName==='plains' || mapName==='zant') list.push(harbor);
     for(const p of portals){ list.push(p); }
     // depth sort by y
     list.sort((a,b)=>a.y-b.y);
@@ -1680,11 +1710,11 @@ Later patches (not in this edit):
     spawnOut('jelly',18);
     // Choropy ring appears further out around the hub
     spawnFar('choropy',16, TILE*22);
-    // Portals: Plains → Zant
+    // Plains portal to Breezy 3–8 zone (Luxem Forest)
     portals.length = 0;
-    portals.push({kind:'npc', npc:'portal', x:TILE*16, y:TILE*10, r:22, dest:'zant', tag:'plaza'});
+    portals.push({kind:'npc', npc:'portal', x: TILE*2, y: startPos.y, r:22, dest:'luxem', tag:'grove'});
+    // If story quest is at travel step to Luxem, mark it complete on arrival there (handled on map change)
   }
-
   function genJunon(){
     for(let i=0;i<MAP_W*MAP_H;i++) tiles[i]=0;
     const cx=18, cy=22, cw=36, ch=26;
@@ -1718,7 +1748,7 @@ Later patches (not in this edit):
     // Junon spawns (Patch 7): tougher mobs
     const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x]; if(tt===0||tt===1){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
     spawnOut('moldy',44); spawnOut('moldy_elite',14); spawnOut('rockgolem',6);
-    // Portals from Junon: keep Luxem only (El Verloon moved to Zant)
+    // Simplify: Junon has a single portal → Luxem
     portals.length = 0;
     portals.push({kind:'npc', npc:'portal', x:(cx-2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'luxem', tag:'grove'});
   }
@@ -1747,11 +1777,8 @@ Later patches (not in this edit):
     const ringSpawn=(t,count,rad)=>{let n=0,ang=0; while(n<count){ const wx=(cx+cw+3)*TILE + Math.cos(ang)*rad; const wy=(cy+Math.floor(ch/2))*TILE + Math.sin(ang)*rad; if(!isInTown(wx,wy)) { spawnMob(t,wx,wy); n++; } ang+=Math.PI*2/count; }};
     spawnOut('woopie',32);
     ringSpawn('woopie',6, TILE*8);
-    // portals: Zant ↔ Plains, Zant → Junon, Zant → El Verloon
+    // Zant → El Verloon only (progression forward)
     portals.length=0;
-    portals.push({kind:'npc', npc:'portal', x:(cx-2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'plains', tag:'main'});
-    portals.push({kind:'npc', npc:'portal', x:(cx+cw+2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'junon', tag:'gate'});
-    // Move El Verloon portal here (from Junon)
     portals.push({kind:'npc', npc:'portal', x:(cx+Math.floor(cw/2))*TILE, y:(cy-2)*TILE, r:22, dest:'elverloon', tag:'oasis'});
   }
 
@@ -1771,11 +1798,8 @@ Later patches (not in this edit):
     const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1600){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0||tt===1){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
     spawnOut('woopie',40); spawnOut('moldy_elite',14); spawnOut('rockgolem',8);
     portals.length=0; 
-    // El Verloon ↔ Junon (unchanged)
+    // Simplify: El Verloon → Junon only
     portals.push({kind:'npc', npc:'portal', x:TILE*18, y:TILE*48, r:22, dest:'junon', tag:'gate'});
-    // El Verloon → Junon teleporter replaces Plains→Junon boat
-    // Secret to Luxem stays
-    portals.push({kind:'npc', npc:'portal', x:TILE*56, y:TILE*22, r:22, dest:'luxem', tag:'grove'});
   }
 
 // Luxem Forest — dense trees, mid mobs
@@ -1798,11 +1822,57 @@ function genLuxem(){
   // Spawns: choropy only (no Woopies in Luxem)
   const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1400){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
   spawnOut('choropy',30);
-  portals.length=0;
-  // Luxem exits back
-  portals.push({kind:'npc', npc:'portal', x:(gx-6)*TILE, y:gy*TILE, r:22, dest:'zant', tag:'plaza'});
-  portals.push({kind:'npc', npc:'portal', x:(gx+6)*TILE, y:gy*TILE, r:22, dest:'junon', tag:'gate'});
+    portals.length=0;
+    // Luxem exits forward only → Zant (no direct Junon)
+    portals.push({kind:'npc', npc:'portal', x:(gx-6)*TILE, y:gy*TILE, r:22, dest:'zant', tag:'plaza'});
 }
+
+  // Canyon (Gorge) — rocky ravines and plateaus, lv 20–30
+  function genCanyon(){
+    for(let i=0;i<MAP_W*MAP_H;i++) tiles[i] = (Math.random()<0.15? 1: 0);
+    // carve canyon lines (dirt paths as ridges)
+    for(let y=8;y<MAP_H-8;y+=6){ for(let x=2;x<MAP_W-2;x++){ tiles[y*MAP_W+x]=1; } }
+    // town-like camp center
+    const cx=30, cy=24; merchant.x = (cx)*TILE; merchant.y = (cy)*TILE; trainer.x = (cx-3)*TILE; trainer.y = (cy)*TILE; storageNPC.x=(cx+3)*TILE; storageNPC.y=(cy)*TILE; sign.x=cx*TILE; sign.y=(cy-2)*TILE;
+    townZones.length=0; townZones.push({type:'rect', x:(cx-2)*TILE, y:(cy-2)*TILE, w:TILE*6, h:TILE*6});
+    el('zone').textContent = MAPS.canyon.label;
+    // spawns: golems and beetles
+    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1800){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x]; if(tt===0||tt===1){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
+    spawnOut('rockgolem',12); spawnOut('gorge_beetle',28);
+    portals.length=0; portals.push({kind:'npc', npc:'portal', x:(cx+8)*TILE, y:(cy+10)*TILE, r:22, dest:'junon', tag:'gate'});
+  }
+
+  // Luna — icy plateaus and moonlit woods, lv 30–40
+  function genLuna(){
+    for(let i=0;i<MAP_W*MAP_H;i++) tiles[i] = 0;
+    // add ice lakes
+    for(let y=12;y<22;y++) for(let x=20;x<32;x++){ tiles[y*MAP_W+x]=2; }
+    const cx=22, cy=18; merchant.x=(cx+2)*TILE; merchant.y=(cy+2)*TILE; trainer.x=(cx-2)*TILE; trainer.y=(cy+2)*TILE; storageNPC.x=cx*TILE; storageNPC.y=(cy+4)*TILE; sign.x=cx*TILE; sign.y=(cy)*TILE;
+    townZones.length=0; townZones.push({type:'rect', x:(cx-3)*TILE, y:(cy-3)*TILE, w:TILE*10, h:TILE*8});
+    el('zone').textContent = MAPS.luna.label;
+    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1800){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x]; if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
+    spawnOut('luna_wolf',24); spawnOut('luna_spirit',16);
+    portals.length=0; portals.push({kind:'npc', npc:'portal', x:(cx+10)*TILE, y:(cy+4)*TILE, r:22, dest:'eldeon', tag:'grove'});
+  }
+
+  // Eldeon Glade — bioluminescent forest, lv 40–50
+  function genEldeon(){
+    for(let i=0;i<MAP_W*MAP_H;i++) tiles[i] = 0;
+    // water veins
+    for(let y=8;y<MAP_H-8;y++) for(let x=14;x<17;x++){ tiles[y*MAP_W+x]=2; }
+    for(let y=12;y<MAP_H-12;y++) for(let x=40;x<42;x++){ tiles[y*MAP_W+x]=2; }
+    // glowing decor clusters
+    decor.length=0; for(let i=0;i<160;i++){ decor.push({t:'flower', x:rand(TILE*3,TILE*(MAP_W-3)), y:rand(TILE*3,TILE*(MAP_H-3))}); }
+    const cx=24, cy=20; merchant.x=(cx+2)*TILE; merchant.y=(cy+2)*TILE; trainer.x=(cx-2)*TILE; trainer.y=(cy+2)*TILE; storageNPC.x=cx*TILE; storageNPC.y=(cy+4)*TILE; sign.x=cx*TILE; sign.y=(cy)*TILE;
+    townZones.length=0; townZones.push({type:'circle', x:cx*TILE, y:cy*TILE, r:TILE*6});
+    el('zone').textContent = MAPS.eldeon.label;
+    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<2200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x]; if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
+    spawnOut('spirit_archer',22); spawnOut('thornling',26);
+    // one treant mini-boss
+    let tries=0; while(tries++<200){ const x=rand(TILE*8,TILE*(MAP_W-8)), y=rand(TILE*8,TILE*(MAP_H-8)); if(!isInTown(x,y)){ spawnMob('ancient_treant',x,y); break; } }
+    // forward portal → stub next
+    portals.length=0; portals.push({kind:'npc', npc:'portal', x:(cx+14)*TILE, y:(cy-6)*TILE, r:22, dest:'canyon', tag:'rim'});
+  }
 
   // Cart summon
   let summonedCart=null;
@@ -1830,7 +1900,7 @@ function genLuxem(){
   function changeJob(j){ player.job=j; jobEl.textContent=j; notify('Job changed to '+j); setSkillsForJob(j); if(j==='Soldier') addToInv('wood_sword',1); if(j==='Hawker') addToInv('wood_bow',1); if(j==='Dealer') addToInv('wood_katar',1); if(j==='Muse') addToInv('wood_wand',1); save(); }
 
   function setSkillsForJob(job){
-    // Slot 1: Weapon ultimate AOE; Slot 2: Utility/alt AOE. Slots 3-4 keep DB skills
+    // Keep slot 1 as weapon AOE; add new job skills at Lv 12–14 and 22–24
     const wepType = getEquippedWeaponType();
     const aoeForWeapon = ()=>{
       if(wepType==='sword') return {id:'whirlwind', name:'Whirlwind', icon:'🌀', cd:10, mp:14, use:()=>superWhirlwind(), unlockedBelow10:true, desc:'Spin attack around you.', req:{wep:'sword'}};
@@ -1841,10 +1911,23 @@ function genLuxem(){
       if(wepType==='katar') return {id:'blade_flurry', name:'Blade Flurry', icon:'🥷', cd:10, mp:12, use:()=>superKatarFlurry(), unlockedBelow10:true, desc:'Rapid circular slashes.', req:{wep:'katar'}};
       return {id:'whirlwind', name:'Whirlwind', icon:'🌀', cd:10, mp:12, use:()=>superWhirlwind(), unlockedBelow10:true, desc:'Spin attack around you.', req:{wep:'sword'}};
     };
-    // Primary AOE in slot 1 only; slot 2 cleared per request
-    player.skills[0] = aoeForWeapon();
-    sicons[0].textContent = player.skills[0].icon;
-    player.skills[1] = null; sicons[1].textContent='—';
+    player.skills[0] = aoeForWeapon(); sicons[0].textContent = player.skills[0].icon;
+    // New slot 2 skill per job (Lv 12–14)
+    let slot2 = null;
+    if(job==='Soldier') slot2 = {id:'shield_dash', name:'Shield Dash', icon:'🛡️', cd:8, mp:10, use:()=>{ dash(140); fx.push({t:0.22, kind:'burst', x:player.x, y:player.y, r:60}); for(const m of ents){ if(!m.alive) continue; if(dist(player.x,player.y,m.x,m.y)<56){ const out=calcDamage(player.atk*0.9,'physical'); m.hp-=out.dmg; showDamage(m.x,m.y,out.dmg,out.crit,'physical'); m.hurt=0.18; if(m.hp<=0){ m.alive=false; onMobKilled(m);} } } }, desc:'Dash forward, damaging nearby foes.', req:{wep:'sword'}};
+    else if(job==='Hawker') slot2 = {id:'poison_shot', name:'Poison Shot', icon:'☠️', cd:6, mp:12, use:()=>{ const ang=getAimDir(); shoot(player.x,player.y,ang, player.atk*0.7, player.projSpeed+40,'player','arrow'); player.buffs.push({poisonTag:true,t:6}); }, desc:'Ranged shot that poisons. Synergy: Flurry +20% vs Poisoned'};
+    else if(job==='Dealer') slot2 = {id:'sticky_bomb', name:'Sticky Bomb', icon:'🧪', cd:8, mp:12, use:()=>{ grenade(); }, desc:'Lob a sticky bomb that explodes.'};
+    else if(job==='Muse') slot2 = {id:'frost_root', name:'Frost Root', icon:'❄️', cd:10, mp:14, use:()=>{ const r=120; for(const m of ents){ if(!m.alive) continue; if(dist(player.x,player.y,m.x,m.y)<r){ m.speed = Math.max(20, (m.speed||90)*0.35); m.hurt=0.2; } } fx.push({t:0.22, kind:'wind', x:player.x, y:player.y, r:120, a:0}); }, desc:'Root nearby enemies briefly.'};
+    player.skills[1] = (player.level>=12? slot2 : null); sicons[1].textContent = player.skills[1]? player.skills[1].icon : '—';
+    // New slot 3 skill per job (Lv 22–24)
+    let slot3 = null;
+    if(job==='Soldier') slot3 = {id:'iron_skin', name:'Iron Skin', icon:'🪨', cd:18, mp:12, use:()=>{ player.buffs.push({t:12, def:10, icon:'🪨', desc:'Defense Up'}); notify('Armor up!'); }, desc:'Temporary armor buff.'};
+    else if(job==='Hawker') slot3 = {id:'evasion_stance', name:'Evasion Stance', icon:'🌀', cd:18, mp:10, use:()=>{ player.buffs.push({t:10, acc:-0.08, icon:'🌀', desc:'Evasion Up'}); notify('Evasion up!'); }, desc:'Briefly harder to hit.'};
+    else if(job==='Dealer') slot3 = {id:'slow_field', name:'Slow Field', icon:'🧲', cd:16, mp:14, use:()=>{ const cx=player.x, cy=player.y; fx.push({t:0.25, kind:'shock', x:cx, y:cy, r:140}); for(const m of ents){ if(!m.alive) continue; if(dist(cx,cy,m.x,m.y)<140){ m.speed = Math.max(30, (m.speed||90)*0.5); } } }, desc:'Area slow trap.'};
+    else if(job==='Muse') slot3 = {id:'party_regen', name:'Party Regen', icon:'➕', cd:16, mp:16, use:()=>{ player.buffs.push({t:10, regen:4, icon:'➕', desc:'Regeneration'}); }, desc:'Regenerate over time.'};
+    player.skills[2] = (player.level>=22? slot3 : null); sicons[2].textContent = player.skills[2]? player.skills[2].icon : '—';
+    // Keep slot 4 empty for now
+    player.skills[3] = null; sicons[3].textContent='—';
   }
 
   // PATCH 1: weapon-aware helpers and primary attack
@@ -1948,7 +2031,6 @@ function genLuxem(){
     }
     save();
   }
-
   function dropGold(x, y, min, max){ const g = (min + Math.floor(Math.random()*(max-min+1)))|0; if(g>0) drops.push({x, y, t:0, gold:g}); }
 
   function dropItemRoll(m){
@@ -2025,6 +2107,36 @@ function genLuxem(){
       if(Math.random()<0.05) rolls.push('angel_wings');
       if(Math.random()<0.04) rolls.push('ring_bronze');
     }
+    if(m.type==='gorge_beetle'){
+      if(Math.random()<0.32) rolls.push('potion_hp');
+      if(Math.random()<0.10) rolls.push('iron_sword');
+      if(Math.random()<0.10) rolls.push('composite_bow');
+      if(Math.random()<0.08) rolls.push('helmet_knight');
+    }
+    if(m.type==='woopie_elite'){
+      if(Math.random()<0.80) rolls.push('ring_silver');
+      if(Math.random()<0.50) rolls.push('potion_hp');
+    }
+    if(m.type==='spirit_archer' || m.type==='thornling'){
+      if(Math.random()<0.30) rolls.push('potion_mp');
+      if(Math.random()<0.10) rolls.push('ring_silver');
+    }
+    if(m.type==='ancient_treant'){
+      rolls.push('cloak_royal');
+      if(Math.random()<0.60) rolls.push('s7');
+      if(Math.random()<0.40) rolls.push('emerald7');
+    }
+    if(m.type==='luna_wolf'){
+      if(Math.random()<0.36) rolls.push('potion_hp');
+      if(Math.random()<0.12) rolls.push('mechanical_wings');
+      if(Math.random()<0.10) rolls.push('steel_armor');
+    }
+    if(m.type==='luna_spirit'){
+      if(Math.random()<0.34) rolls.push('potion_mp');
+      if(Math.random()<0.12) rolls.push('mystic_wand');
+      if(Math.random()<0.10) rolls.push('battle_staff');
+      if(Math.random()<0.06) rolls.push('ring_gold');
+    }
     // Global rare gem drop ~1.5%
     if(Math.random()<0.015){ const gems=['t7','g7','r7','s7','emerald7']; rolls.push(gems[(Math.random()*gems.length)|0]); }
     // Enforce map gating for gear drops
@@ -2060,7 +2172,7 @@ function genLuxem(){
 
   function questKillCredit(type){
     const q = quests[qIndex]; if(!q || q.done) return;
-    if(q.type===type){
+    if(q.type===type || (q.type==='eldeon_kill' && (type==='spirit_archer'||type==='thornling'))){
       q.prog = (q.prog||0)+1;
       if(q.prog >= q.need){
         q.done = true;
@@ -2088,7 +2200,7 @@ function genLuxem(){
   // PATCH 3: Cart quest gating
   function interactCartMaster(){
     const q = quests.find(q=>q.id===3);
-    if(q && q.done){ notify('You’re licensed. Press C to summon a cart.'); return; }
+    if(q && q.done){ notify("You're licensed. Press C to summon a cart."); return; }
     if(!cartQuest.active){ notify(`Cart License quest started: pay ${cartQuest.fee}✦ and defeat ${cartQuest.needPumpkins} Pumpkins.`); cartQuest.active = true; cartQuest.pumpkins = 0; save(); return; }
     if(!cartQuest.paid){ if((player.gold|0) >= cartQuest.fee){ player.gold -= cartQuest.fee; cartQuest.paid = true; notify('Fee paid. Now defeat '+cartQuest.needPumpkins+' Pumpkins.'); save(); } else { notify('You need '+(cartQuest.fee - (player.gold|0))+' more gold for the fee.'); } return; }
     if(cartQuest.pumpkins >= cartQuest.needPumpkins){ addToInv('cart_pass',1); player.flags.cartUnlocked = true; const q3 = quests.find(x=>x.id===3); if(q3){ q3.done = true; if(qIndex<quests.length-1) qIndex++; } notify('Cart License acquired! Press C to summon, E near cart to mount.'); save(); } else { notify(`Progress: ${cartQuest.pumpkins}/${cartQuest.needPumpkins} Pumpkins defeated.`); }
@@ -2125,10 +2237,16 @@ function genLuxem(){
       questLine.textContent=q.line; questProg.textContent='';
     } else if(q.type==='level'){
       questLine.textContent=q.line; questProg.textContent=`Lv ${player.level}/${q.need}`;
+    } else if(q.type==='travel'){
+      // travel step: show destination and simple hint
+      const dest = q.to || '';
+      const label = dest==='luxem'? 'Luxem Forest' : dest==='zant'? 'Zant' : dest==='elverloon'? 'El Verloon Desert' : dest==='junon'? 'Junon Polis' : dest==='eldeon'? 'Eldeon Glade' : '';
+      questLine.textContent = q.line || (`Travel to ${label}`);
+      questProg.textContent = label? `Destination: ${label}` : '';
     } else if(q.type==='cartquest'){
       questLine.textContent=q.line; const prog = cartQuest.active? `${cartQuest.paid? 'Paid, ':''}${cartQuest.pumpkins}/${cartQuest.needPumpkins} pumpkins` : 'Talk to the Cart Master.'; questProg.textContent=prog;
     } else {
-      questLine.textContent=q.title+': '+q.line; questProg.textContent=`${q.prog||0}/${q.need}`;
+      questLine.textContent=q.title+': '+q.line; if(q.need){ questProg.textContent=`${q.prog||0}/${q.need}`; } else { questProg.textContent=''; }
     }
     if(questReward) questReward.textContent = 'Rewards: ' + rewardText(q) + ' — spend gold at the Merchant (🛒).';
   }
@@ -2182,11 +2300,9 @@ function genLuxem(){
       else if(nearest(trainer)<TILE*1.8){ openJobs(); keys['e']=false; }
       // Map quest giver: press E near sign in non-plains maps to grab bounty
       else if(nearest(sign)<TILE*1.8 && mapName!=='plains'){ openMapBounties(); keys['e']=false; }
-      else if(nearest(storageNPC)<TILE*1.8){ openStorage(); keys['e']=false; }
+      else if(nearest(storageNPC)<TILE*1.8){ openJobs(); keys['e']=false; }
       else if(nearest(cartMaster)<TILE*1.8){ interactCartMaster(); keys['e']=false; }
       else if(summonedCart && nearest(summonedCart)<TILE*1.8){ mountCart(); keys['e']=false; }
-      else if(nearest(harbor)<TILE*1.8){ interactHarbor(); keys['e']=false; }
-      else if(mapName==='junon' && nearest(ferryJ)<TILE*1.8){ interactHarbor(); keys['e']=false; }
       else {
         // Portals interaction
         for(const p of portals){ if(dist(player.x,player.y,p.x,p.y)<(p.r||22)){ changeMap(p.dest, p.tag||'main'); keys['e']=false; break; } }
@@ -2226,6 +2342,25 @@ function genLuxem(){
         }
         if(m.type==='jellyking' && Math.random()<0.006 && !isInTown(player.x, player.y)){
           const a4=Math.atan2(player.y-m.y,player.x-m.x); shoot(m.x,m.y,a4,14,260,'mob');
+        }
+        // Elite and boss micro-mechanics
+        if(m.type==='woopie_elite' && Math.random()<0.004){
+          // short leap + stun pulse
+          const a5=Math.atan2(player.y-m.y,player.x-m.x); m.x+=Math.cos(a5)*40; m.y+=Math.sin(a5)*40; fx.push({t:0.22, kind:'burst', x:m.x, y:m.y, r:70}); if(dist(player.x,player.y,m.x,m.y)<70) dmgPlayer(12,'physical');
+        }
+        if(m.golem && Math.random()<0.003){
+          // charged slam with telegraph
+          fx.push({t:0.35, kind:'shock', x:m.x, y:m.y, r:90}); setTimeout(()=>{ if(dist(player.x,player.y,m.x,m.y)<90) dmgPlayer(24,'physical'); }, 360);
+        }
+        if(m.type==='choropy' && Math.random()<0.004){
+          // dash-through
+          const a6=Math.atan2(player.y-m.y,player.x-m.x); m.x+=Math.cos(a6)*60; m.y+=Math.sin(a6)*60; fx.push({t:0.18, kind:'wind', x:m.x, y:m.y, r:50, a:a6});
+        }
+        if(m.treant && Math.random()<0.004){
+          // radial shots and add spawn
+          for(let i=0;i<10;i++){ const ang=i*(Math.PI*2/10); shoot(m.x,m.y,ang,10,220,'mob','magic'); }
+          // spawn adds
+          for(let i=0;i<3;i++){ const ang=Math.random()*Math.PI*2; const rx=m.x+Math.cos(ang)*80, ry=m.y+Math.sin(ang)*80; spawnMob(Math.random()<0.5?'thornling':'spirit_archer', rx, ry); }
         }
       } else {
         m.x += (r()-0.5)*20*dt; m.y += (r()-0.5)*20*dt;
@@ -2532,7 +2667,7 @@ function genLuxem(){
       mapCtx.strokeStyle='rgba(255,255,255,0.35)'; mapCtx.lineWidth=1;
       mapCtx.strokeRect(camera.x*scaleX, camera.y*scaleY, vw*scaleX, vh*scaleY);
       // Minimap label: map name + level range
-      if(minimapLabel){ const lbl = (mapName==='plains')? 'Adventure Plains' : (mapName==='zant'? 'Zant' : (mapName==='junon'? 'Junon Polis' : (mapName==='elverloon'? 'El Verloon Desert' : ''))); const range = MAP_ITEM_LEVELS[mapName] || [1, MAX_LEVEL]; minimapLabel.textContent = `${lbl}${lbl? ' · ':''}Lv ${range[0]}–${range[1]}`; }
+      if(minimapLabel){ const lbl = (mapName==='plains')? 'Adventure Plains' : (mapName==='zant'? 'Zant' : (mapName==='junon'? 'Junon Polis' : (mapName==='elverloon'? 'El Verloon Desert' : (mapName==='luxem'? 'Luxem Forest' : (mapName==='canyon'? 'Gorge Canyon' : (mapName==='luna'? 'Luna' : (mapName==='eldeon'? 'Eldeon Glade' : ''))))))); const range = MAP_ITEM_LEVELS[mapName] || [1, MAX_LEVEL]; minimapLabel.textContent = `${lbl}${lbl? ' · ':''}Lv ${range[0]}–${range[1]}`; }
     }
   }
 
@@ -2727,6 +2862,39 @@ function genLuxem(){
     else if(m.type==='moldy'){ const g=ctx.createLinearGradient(0, s.y-m.r, 0, s.y+m.r); g.addColorStop(0,'#8dcf6a'); g.addColorStop(1,'#537a3d'); ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(s.x, s.y+4, m.r, m.r-4, 0, 0, Math.PI*2); ctx.fill(); }
     else if(m.type==='moldy_elite'){ const g=ctx.createLinearGradient(0, s.y-m.r, 0, s.y+m.r); g.addColorStop(0,'#79bf58'); g.addColorStop(1,'#3e6a2a'); ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(s.x, s.y+3, m.r+2, m.r-2, 0, 0, Math.PI*2); ctx.fill(); }
     else if(m.type==='rockgolem'){ ctx.fillStyle='#5b676f'; ctx.fillRect(s.x-m.r+2, s.y-m.r+6, (m.r*2)-4, (m.r*2)-10); ctx.fillStyle='#2a3238'; ctx.fillRect(s.x-6, s.y-4, 12, 8); }
+    else if(m.type==='gorge_beetle'){
+      // Gorge Beetle — stout beetle with rocky carapace
+      ctx.save();
+      const r=m.r; ctx.translate(s.x,s.y);
+      ctx.fillStyle='#5b4a2c'; ctx.beginPath(); ctx.ellipse(0, 4, r*1.1, r*0.8, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle='#2e2416'; ctx.beginPath(); ctx.ellipse(0, -4, r*0.8, r*0.6, 0, 0, Math.PI*2); ctx.fill();
+      // legs
+      ctx.strokeStyle='#2e2416'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(-r,0); ctx.lineTo(-r-6,6); ctx.moveTo(-r,4); ctx.lineTo(-r-6,10); ctx.moveTo(r,0); ctx.lineTo(r+6,6); ctx.moveTo(r,4); ctx.lineTo(r+6,10); ctx.stroke();
+      // mandibles
+      ctx.fillStyle='#cfc2a8'; ctx.fillRect(-4,-r*0.9,3,6); ctx.fillRect(1,-r*0.9,3,6);
+      ctx.restore();
+    }
+    else if(m.type==='luna_wolf'){
+      // Luna Wolf — sleek icy wolf with glow eyes
+      ctx.save(); const r=m.r; ctx.translate(s.x,s.y);
+      ctx.fillStyle='#b8d4e8'; ctx.beginPath(); ctx.ellipse(0,4,r*1.2,r*0.7,0,0,Math.PI*2); ctx.fill();
+      // head
+      ctx.beginPath(); ctx.ellipse(r*0.8,-r*0.2,r*0.7,r*0.5,0,0,Math.PI*2); ctx.fill();
+      // ear triangles
+      ctx.beginPath(); ctx.moveTo(r*0.9,-r*0.9); ctx.lineTo(r*1.2,-r*0.4); ctx.lineTo(r*0.6,-r*0.5); ctx.closePath(); ctx.fill();
+      // eyes
+      ctx.fillStyle='#8fe0ff'; ctx.beginPath(); ctx.arc(r*1.1,-r*0.2,2.6,0,Math.PI*2); ctx.arc(r*0.9,-r*0.18,2.6,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+    else if(m.type==='luna_spirit'){
+      // Luna Spirit — floating wisp with cold aura
+      ctx.save(); const r=m.r; ctx.translate(s.x,s.y);
+      const grd = ctx.createRadialGradient(0,0,2,0,0,r+14);
+      grd.addColorStop(0,'rgba(180,230,255,0.95)'); grd.addColorStop(1,'rgba(120,180,220,0.15)');
+      ctx.fillStyle=grd; ctx.beginPath(); ctx.ellipse(0,0,r*0.9,r*0.9,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#dff6ff'; ctx.beginPath(); ctx.arc(-4,-2,3,0,Math.PI*2); ctx.arc(4,-2,3,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
     else if(m.type==='choropy'){
       // Choropy — cute horizontal caterpillar with face leading
       ctx.save();
@@ -2881,6 +3049,9 @@ function genLuxem(){
     if(m.type==='rockgolem') return 16;
     if(m.type==='choropy') return 6;
     if(m.type==='woopie') return 8;
+    if(m.type==='gorge_beetle') return 22;
+    if(m.type==='luna_wolf') return 32;
+    if(m.type==='luna_spirit') return 34;
     return m.boss? 14 : 6;
   }
   function getMobName(m){
@@ -2888,6 +3059,9 @@ function genLuxem(){
     if(m.type==='flanae') return 'Flaenae';
     if(m.type==='choropy') return 'Choropy';
     if(m.type==='woopie') return 'Woopie';
+    if(m.type==='gorge_beetle') return 'Gorge Beetle';
+    if(m.type==='luna_wolf') return 'Luna Wolf';
+    if(m.type==='luna_spirit') return 'Luna Spirit';
     const n = (m.type||'mob').replace(/_/g,' ').replace(/^./, c=>c.toUpperCase());
     if(n==='Jelly') return 'Jelly Bean';
     return n;
@@ -2910,6 +3084,3 @@ function genLuxem(){
 </script>
 </body>
 </html>
-
-
-
