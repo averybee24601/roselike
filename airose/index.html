@@ -2,12 +2,131 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Rose Evolution</title>
+    <title>AI Rose Evolution — Adventure Plains</title>
+    <style>
+      :root{
+        --ui-bg: rgba(18,22,28,0.85);
+        --ui-accent: #6cf;
+        --hp: #e74c3c;
+        --mp: #3498db;
+        --xp: #9b59b6;
+        --gold: #f1c40f;
+        --green: #71e6a2;
+      }
+      html, body{ margin:0; height:100%; background:#0a0f14; color:#e6eef7; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; overflow:hidden; }
+      #game-wrap{position:fixed; inset:0; display:grid; grid-template-rows: 1fr;}
+      canvas{width:100%; height:100%; display:block; background: radial-gradient(200vmax 200vmax at 30% 30%, #10212e, #0a0f14 60%);} 
+      /* HUD */
+      .hud{position:fixed; inset:0; pointer-events:none}
+      .bar{position:absolute; left:12px; top:12px; width:min(640px, 94vw); background:var(--ui-bg); padding:10px; border-radius:14px; box-shadow:0 10px 30px rgba(0,0,0,.35);} 
+      .row{display:flex; gap:8px; align-items:center}
+      .chip{padding:2px 8px; border-radius:999px; background:rgba(255,255,255,.06); font-size:12px}
+      .meter{position:relative; height:10px; flex:1; background:rgba(255,255,255,.08); border-radius:999px; overflow:hidden}
+      .meter>i{position:absolute; inset:0; width:0%; display:block}
+      .hp{background:linear-gradient(90deg, var(--hp), #ff7675)}
+      .mp{background:linear-gradient(90deg, var(--mp), #6ab3ff)}
+      .xp{background:linear-gradient(90deg, var(--xp), #cfa2ff)}
+
+      /* Minimap & Quest */
+      .minimap{position:absolute; left:12px; top:110px; width:180px; height:120px; background:var(--ui-bg); border-radius:10px; box-shadow:0 6px 20px rgba(0,0,0,.25); pointer-events:none}
+      .minimap-label{position:absolute; left:12px; top:236px; background:var(--ui-bg); border:1px solid rgba(255,255,255,.12); padding:4px 8px; border-radius:10px; font-size:12px}
+      .quest{position:absolute; right:12px; top:12px; background:var(--ui-bg); padding:10px 12px; border-radius:14px; width:min(420px, 96vw)}
+      .quest h3{margin:0 0 4px 0; font-size:14px; letter-spacing:.3px}
+      .quest p{margin:2px 0; font-size:13px; color:#cde}
+
+      /* Windows */
+      .window{position:fixed; right:12px; bottom:70px; width:min(640px, 96vw); background:#0f1520; border:1px solid rgba(255,255,255,.12); border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.45); padding:14px; display:none; pointer-events:auto}
+      .window h2{margin:2px 0 8px; font-size:16px}
+      .window .list{display:grid; grid-template-columns: 1fr auto; gap:10px; max-height: 54vh; overflow:auto}
+      .window .item{background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px}
+      .window button{all:unset; background:linear-gradient(180deg, #1d2b3a, #13202c); border:1px solid rgba(255,255,255,.18); padding:8px 10px; border-radius:10px; cursor:pointer}
+      .window .close{position:absolute; right:10px; top:10px; opacity:.8}
+      .pill{display:inline-block; padding:2px 8px; border-radius:999px; background:rgba(255,255,255,.08); font-size:11px; margin-left:6px}
+      .hint{position:absolute; left:50%; transform:translateX(-50%); top:12px; background:var(--ui-bg); padding:6px 10px; border-radius:12px; border:1px solid rgba(255,255,255,.12); font-size:12px}
+
+      /* Hotbar & XP */
+      .hotbar{position:absolute; left:50%; transform:translateX(-50%); bottom:70px; display:flex; gap:8px; pointer-events:auto}
+      .slot{width:64px; height:64px; border-radius:12px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.14); display:grid; place-items:center; position:relative; font-size:24px}
+      .slot b{position:absolute; left:6px; top:4px; font-size:11px; opacity:.7}
+      .xpbar{position:absolute; left:50%; transform:translateX(-50%); bottom:16px; width:min(860px, 96vw); background:var(--ui-bg); padding:10px 12px; border-radius:14px; pointer-events:none}
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="game-wrap"></div>
+    <div class="hud" aria-hidden="false">
+      <div class="bar" aria-label="stats">
+        <div class="row" style="gap:12px">
+          <div class="chip" id="zone">Adventure Plains</div>
+          <div class="chip">Job <span id="job">Visitor</span></div>
+          <div class="chip">Name <span id="pname">—</span></div>
+          <div class="chip">LV <span id="lv">1</span></div>
+          <div class="chip">Gold <span id="gold">0</span> ✦</div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <span style="width:42px; font-size:12px">HP</span>
+          <div class="meter"><i class="hp" id="hp"></i></div>
+          <span style="width:42px; font-size:12px">MP</span>
+          <div class="meter"><i class="mp" id="mp"></i></div>
+        </div>
+      </div>
+      <canvas id="minimap" class="minimap"></canvas>
+      <div id="minimapLabel" class="minimap-label"></div>
+      <div class="quest" aria-live="polite">
+        <h3>Quest Tracker</h3>
+        <p id="quest-line">Welcome to Adventure Plains. Press <b>E</b> near the signpost.</p>
+        <p id="quest-progress"></p>
+        <p id="quest-reward" style="opacity:.9"></p>
+      </div>
+      <div class="hint" id="hint">Find the <b>Merchant</b> (🛒), the <b>Trainer</b> (★), and the <b>Cart Master</b> (🛞). Press <b>E</b> to interact.</div>
+    </div>
+
+    <div class="hotbar" id="hotbar" aria-label="skills">
+      <div class="slot" data-s="0" title="Skill 1"><b>1</b><span id="sicon0">—</span></div>
+      <div class="slot" data-s="1" title="Skill 2"><b>2</b><span id="sicon1">—</span></div>
+      <div class="slot" data-s="2" title="Skill 3"><b>3</b><span id="sicon2">—</span></div>
+      <div class="slot" data-s="3" title="Skill 4"><b>4</b><span id="sicon3">—</span></div>
+    </div>
+
+    <div class="xpbar">
+      <div class="row">
+        <span style="width:60px; font-size:12px">XP</span>
+        <div class="meter" style="flex:1"><i class="xp" id="xp"></i></div>
+        <span class="chip">Next <span id="nextxp">50</span></span>
+        <span class="chip" style="margin-left:auto">Keys: <b>I</b> Inventory · <b>Alt+M</b> Shop · <b>Alt+L</b> Storage</span>
+      </div>
+    </div>
+
+    <div class="window" id="invWin">
+      <button class="close" id="invClose">✕</button>
+      <h2>Inventory <span class="pill" id="invCount"></span></h2>
+      <div class="list" id="invList"></div>
+    </div>
+    <div class="window" id="shopWin">
+      <button class="close" id="shopClose">✕</button>
+      <h2>Merchant 🛒 — <span id="shopMapLabel">Region</span> <span class="pill">Gold <span id="shopGold">0</span> ✦</span></h2>
+      <div class="list" id="shopList"></div>
+    </div>
+    <div class="window" id="jobWin">
+      <button class="close" id="jobClose">✕</button>
+      <h2>Trainer ★ — Choose Your Job <span class="pill">Requires Lv 10</span></h2>
+      <div class="list" id="jobList"></div>
+    </div>
+    <div class="window" id="storageWin">
+      <button class="close" id="storageClose">✕</button>
+      <h2>Storage 🧳 — Personal Stash</h2>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
+        <div>
+          <h3 style="margin:4px 0 6px; font-size:14px">Inventory</h3>
+          <div class="list" id="storInvList"></div>
+        </div>
+        <div>
+          <h3 style="margin:4px 0 6px; font-size:14px">Storage</h3>
+          <div class="list" id="storBoxList"></div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

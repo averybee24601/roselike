@@ -340,6 +340,13 @@ Later patches (not in this edit):
       </div>
     </div>
   </div>
+  <!-- Dialogue window for NPC conversations -->
+  <div class="window" id="dialogWin" style="display:none">
+    <button class="close" id="dialogClose">✕</button>
+    <h2 id="dialogTitle">Talk</h2>
+    <div class="list" id="dialogText"></div>
+    <div class="actions" id="dialogOptions"></div>
+  </div>
   <div class="window" id="charWin">
     <button class="close" id="charClose">✕</button>
     <h2>Character <span class="pill">Alt+C</span></h2>
@@ -390,6 +397,9 @@ Later patches (not in this edit):
   const charWeapon = el('charWeapon'), charHelmet=el('charHelmet'), charArmor = el('charArmor'), charBoots=el('charBoots'), charAcc=el('charAcc'), charWings=el('charWings');
   const charStats = el('charStats');
   const storageWin = el('storageWin'); const storInvList = el('storInvList'); const storBoxList = el('storBoxList'); const storageClose = el('storageClose'); const storageCount = el('storageCount');
+  // Dialogue elements
+  const dialogWin = el('dialogWin'); const dialogClose = el('dialogClose');
+  const dialogTitle = el('dialogTitle'); const dialogTextEl = el('dialogText'); const dialogOptions = el('dialogOptions');
   let jobGuideWin = null;
   const invCount=el('invCount');
   const shopGold=el('shopGold');
@@ -434,7 +444,100 @@ Later patches (not in this edit):
     handle.addEventListener('touchstart', onDown, {passive:false});
   }
   // Apply to built-in windows
-  [invWin, shopWin, jobWin, statsWin, storageWin, charWin, document.querySelector('.quest')].forEach(w=> makeDraggable(w));
+  [invWin, shopWin, jobWin, statsWin, storageWin, charWin, dialogWin, document.querySelector('.quest')].forEach(w=> makeDraggable(w));
+
+  // Dialogue helpers
+  function closeDialogue(){ if(dialogWin) dialogWin.style.display='none'; }
+  if(dialogClose) dialogClose.onclick = closeDialogue;
+  function setDialogue(title, htmlText, options){
+    if(!dialogWin) return;
+    dialogTitle.textContent = title || 'Talk';
+    dialogTextEl.innerHTML = `<div class="item">${htmlText}</div>`;
+    dialogOptions.innerHTML = '';
+    (options||[]).forEach(opt=>{
+      const btn=document.createElement('button'); btn.textContent=opt.label; btn.onclick=opt.onClick; dialogOptions.appendChild(btn);
+    });
+    dialogWin.style.display='block';
+    if(typeof ttsSay==='function'){ try{ ttsSay(String(htmlText).replace(/<[^>]+>/g,'')); }catch(e){} }
+  }
+  function openDialogue(kind, ctx){
+    if(kind==='merchant'){
+      const greet = `Poppy the Merchant: "Shiny day for shiny deals! Got what you need for the road."`;
+      setDialogue('Poppy 🛒 — Merchant', greet, [
+        {label:'Show me your wares', onClick:()=>{ closeDialogue(); openShop(); }},
+        {label:'Any advice for this area?', onClick:()=>{
+          setDialogue('Poppy 🛒 — Tips', 'Keep a potion or two handy. Finish quests for gold, then upgrade your gear. If foes hit too hard, kite them and use your AOE skill.', [
+            {label:'Back', onClick:()=>openDialogue('merchant')},
+            {label:'Goodbye', onClick:()=>closeDialogue()}
+          ]);
+        }},
+        {label:'Goodbye', onClick:()=>closeDialogue()}
+      ]);
+    }
+    else if(kind==='trainer'){
+      const hasJob = (player.job && player.job!=='Visitor');
+      const canJob = player.level>=10;
+      const intro = hasJob? `Trainer Lyra: "Stand tall, ${player.job}. Keep honing your skills."` : (canJob? `Trainer Lyra: "You look ready. At Lv 10 you can choose your path. Want to commit?"` : `Trainer Lyra: "Welcome, traveler. Train hard and return at Lv 10 to choose your path."`);
+      const opts=[];
+      if(!hasJob){
+        opts.push({label: canJob? 'Choose a Job' : 'I will return at Lv 10', onClick:()=>{ if(canJob){ closeDialogue(); openJobs(); } else { closeDialogue(); } }});
+      } else {
+        opts.push({label:'Remind me about my role', onClick:()=>{
+          setDialogue('Lyra ★ — Guidance', `${player.job==='Soldier'?'Soldiers lead the charge. Keep your armor strong and strike decisively.':player.job==='Hawker'?'Hawkers flow like wind. Keep distance or dash through.':player.job==='Dealer'?'Dealers improvise. Bombs, traps, and gadgets win scrappy fights.':'Muses harness mana. Keep casting, weave bolts with heals.'}`, [
+            {label:'Back', onClick:()=>openDialogue('trainer')},
+            {label:'Goodbye', onClick:()=>closeDialogue()}
+          ]);
+        }});
+      }
+      opts.push({label:'Goodbye', onClick:()=>closeDialogue()});
+      setDialogue('Lyra ★ — Trainer', intro, opts);
+    }
+    else if(kind==='storage'){
+      setDialogue('Mira 🧳 — Quartermaster', `"I keep things safe. Want me to open your personal stash?"`, [
+        {label:'Open Storage', onClick:()=>{ closeDialogue(); openStorage(); }},
+        {label:'What do you do?', onClick:()=>{
+          setDialogue('Mira 🧳', 'Drop off extra gear to free up space. Come back anytime to withdraw.', [
+            {label:'Back', onClick:()=>openDialogue('storage')},
+            {label:'Goodbye', onClick:()=>closeDialogue()}
+          ]);
+        }},
+        {label:'Goodbye', onClick:()=>closeDialogue()}
+      ]);
+    }
+    else if(kind==='sign'){
+      if(mapName==='plains'){
+        setDialogue('Wooden Signpost ℹ️', 'Welcome to Adventure Plains! Read the notice to begin your first task.', [
+          {label:'Read the notice', onClick:()=>{ closeDialogue(); interactSign(); }},
+          {label:'Where should I go?', onClick:()=>{
+            setDialogue('Signpost ℹ️', 'Find the swirling portal (🌀) to travel onward. Visit the Merchant for gear and the Trainer for your job at Lv 10.', [
+              {label:'Back', onClick:()=>openDialogue('sign')},
+              {label:'Goodbye', onClick:()=>closeDialogue()}
+            ]);
+          }},
+          {label:'Goodbye', onClick:()=>closeDialogue()}
+        ]);
+      } else {
+        setDialogue('Bounty Board ℹ️', 'Handwritten notes list local threats. Want to accept a bounty?', [
+          {label:'Accept a bounty', onClick:()=>{ closeDialogue(); openMapBounties(); }},
+          {label:'How do bounties work?', onClick:()=>{
+            setDialogue('Bounty Board ℹ️', 'Defeat the listed monsters. Your quest tracker shows progress. Turn-in is automatic.', [
+              {label:'Back', onClick:()=>openDialogue('sign')},
+              {label:'Goodbye', onClick:()=>closeDialogue()}
+            ]);
+          }},
+          {label:'Goodbye', onClick:()=>closeDialogue()}
+        ]);
+      }
+    }
+    else if(kind==='portal' && ctx){
+      const lblMap = {plains:'Adventure Plains', zant:'Zant', junon:'Junon Polis', elverloon:'El Verloon Desert', luxem:'Luxem Forest', canyon:'Gorge Canyon', luna:'Luna', eldeon:'Eldeon Glade'};
+      const label = lblMap[ctx.dest] || 'Unknown Lands';
+      setDialogue('Captain Rush ⛵', `"Destination set: ${label}. Ready to depart?"`, [
+        {label:`Travel to ${label}`, onClick:()=>{ closeDialogue(); changeMap(ctx.dest, ctx.tag||'main'); }},
+        {label:'Not yet', onClick:()=>closeDialogue()}
+      ]);
+    }
+  }
 
   // Friends & Party minimal data
   const SOCIAL_KEY='ap-social-v1';
@@ -1722,7 +1825,7 @@ Later patches (not in this edit):
       }
     }
 
-    // Rivers: two north→south channels forming a central island
+    // River: a single north→south channel (simpler traversal)
     const river = (xCenterBase, amp, width)=>{
       for(let y=12; y<MAP_H-16; y++){
         const xc = Math.floor(xCenterBase + Math.sin(y*0.22 + (xCenterBase*0.1)) * amp);
@@ -1733,7 +1836,6 @@ Later patches (not in this edit):
     };
     const cxIsland = Math.floor(MAP_W*0.5);
     river(cxIsland-7, 1, 1);
-    river(cxIsland+7, 1, 1);
 
     // Primary loop road ringing the central island (slightly larger and thicker)
     const markRoad = (x,y,w=3)=>{
@@ -1776,18 +1878,18 @@ Later patches (not in this edit):
     const caveTx = MAP_W-18, caveTy = 10; drawSpur(cx+6, cy-ry, caveTx, caveTy);
     plainsCave = { x: caveTx*TILE, y: caveTy*TILE };
 
-    // Town footprint at SE coast near the bay
+    // Town footprint at SE coast near the bay — make town bigger
     const townX = (MAP_W-18)*TILE, townY = (MAP_H-16)*TILE;
-    const ring = TILE*3.2;
+    const ring = TILE*4.5;
     plainsTownCenter = {x: townX, y: townY};
-    // Ensure ground: carve a rectangular dirt pad under the town
+    // Ensure ground: carve a larger rectangular dirt pad under the town
     const townTx = Math.floor(townX / TILE), townTy = Math.floor(townY / TILE);
-    for(let y=townTy-8; y<=townTy+8; y++){
-      for(let x=townTx-10; x<=townTx+10; x++){
+    for(let y=townTy-12; y<=townTy+12; y++){
+      for(let x=townTx-14; x<=townTx+14; x++){
         if(x>1&&y>1&&x<MAP_W-1&&y<MAP_H-1) tiles[y*MAP_W+x]=1;
       }
     }
-    decor.push({t:'plaza', x:townX, y:townY, r:TILE*11.0});
+    decor.push({t:'plaza', x:townX, y:townY, r:TILE*14.0});
     decor.push({t:'bonfire', x:townX, y:townY});
     // NPCs around the plaza
     sign.x = townX; sign.y = townY - ring;
@@ -1796,10 +1898,10 @@ Later patches (not in this edit):
     storageNPC.x = townX; storageNPC.y = townY + ring;
     const placeBld = (cx,cy,wTiles,hTiles,opts)=>{ const e={t:'bld', x:cx, y:cy, w:wTiles*TILE, h:hTiles*TILE}; if(opts){ Object.assign(e,opts);} decor.push(e); };
     const placeStall = (cx,cy,col)=> decor.push({t:'stall', x:cx, y:cy, col});
-    placeBld(sign.x, sign.y - TILE*2.2, 3, 2, {roof:'#3f7aa6', banner:'#3f7aa6', sign:'info'});
-    placeBld(merchant.x - TILE*2.8, merchant.y, 4, 3, {roof:'#a84f3c', banner:'#c95a4a', sign:'shop'}); placeStall(merchant.x - TILE*1.0, merchant.y - TILE*0.6, '#c95a4a');
-    placeBld(trainer.x + TILE*2.8, trainer.y, 4, 3, {roof:'#7aa63f', banner:'#4a8ac9', sign:'trainer'}); placeStall(trainer.x + TILE*1.0, trainer.y - TILE*0.6, '#4a8ac9');
-    placeBld(storageNPC.x, storageNPC.y + TILE*2.4, 4, 3, {roof:'#a68b3f', banner:'#af964a', sign:'storage'});
+    placeBld(sign.x, sign.y - TILE*2.6, 3, 2, {roof:'#3f7aa6', banner:'#3f7aa6', sign:'info'});
+    placeBld(merchant.x - TILE*3.8, merchant.y, 5, 3, {roof:'#a84f3c', banner:'#c95a4a', sign:'shop'}); placeStall(merchant.x - TILE*1.4, merchant.y - TILE*0.8, '#c95a4a');
+    placeBld(trainer.x + TILE*3.8, trainer.y, 5, 3, {roof:'#7aa63f', banner:'#4a8ac9', sign:'trainer'}); placeStall(trainer.x + TILE*1.4, trainer.y - TILE*0.8, '#4a8ac9');
+    placeBld(storageNPC.x, storageNPC.y + TILE*3.0, 5, 3, {roof:'#a68b3f', banner:'#af964a', sign:'storage'});
 
     // Pier and ship on the bay (adjust for smaller bay)
     const pierX = (MAP_W-12)*TILE, pierY = (MAP_H-10)*TILE;
@@ -1811,179 +1913,144 @@ Later patches (not in this edit):
     // Place a few pillar markers around the hill
     for(let k=0;k<5;k++){ const a=(k/5)*Math.PI*2, rr=plainsFlaenaeHill.r*0.9; decor.push({t:'pillar', x:plainsFlaenaeHill.x + Math.cos(a)*rr, y:plainsFlaenaeHill.y + Math.sin(a)*rr}); }
 
-    // Safe zones: town circle and pier
+    // Safe zones: town circle and pier (larger town radius)
     townZones.length = 0;
-    townZones.push({type:'circle', x:townX, y:townY, r:TILE*12.0});
+    townZones.push({type:'circle', x:townX, y:townY, r:TILE*16.0});
     townZones.push({type:'circle', x:pierX, y:pierY, r:TILE*6.0});
     el('zone').textContent = MAPS.plains.label;
 
     // Base spawns: jellies near outskirts, choropy further; Flaenae concentrated on hill
-    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<2200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy) && dist(wx,wy,plainsTownCenter.x,plainsTownCenter.y)>TILE*22){ spawnMob(t,wx,wy); n++; }}}};
+    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<2200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy) && dist(wx,wy,plainsTownCenter.x,plainsTownCenter.y)>TILE*28){ spawnMob(t,wx,wy); n++; }}}};
     const spawnRing=(t,count,cx,cy,rad)=>{let n=0,ang=0;while(n<count){ const wx=cx+Math.cos(ang)*rad, wy=cy+Math.sin(ang)*rad; const tx=(wx/TILE)|0, ty=(wy/TILE)|0; if(tx>=0&&ty>=0&&tx<MAP_W&&ty<MAP_H && tiles[ty*MAP_W+tx]===0 && !isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; } ang+=Math.PI*2/Math.max(4,count); }};
     spawnOut('jelly', 18);
     spawnOut('choropy', 12);
     // Flaenae on hill
     spawnRing('flanae', Math.min((GRAPHICS&&GRAPHICS.caps&&GRAPHICS.caps.flaenae)||8, 10), plainsFlaenaeHill.x, plainsFlaenaeHill.y, plainsFlaenaeHill.r*0.7);
 
-    // No travel portals in Plains per design; keep empty
+    // Travel portal: Captain Rush near the pier → Luxem Forest
     portals.length = 0;
+    portals.push({kind:'npc', npc:'portal', x:pierX+TILE*1.0, y:pierY+TILE*2.4, r:22, dest:'luxem', tag:'grove'});
   }
   function genJunon(){
+    // Redesigned Junon: larger city rectangle with canals and central plaza
     for(let i=0;i<MAP_W*MAP_H;i++) tiles[i]=0;
-    const cx=18, cy=22, cw=36, ch=26;
-    for(let y=cy; y<cy+ch; y++) for(let x=cx; x<cx+cw; x++) tiles[y*MAP_W+x] = 1; // dirt pad
+    const cx=16, cy=16, cw=40, ch=30;
+    for(let y=cy; y<cy+ch; y++) for(let x=cx; x<cx+cw; x++) tiles[y*MAP_W+x] = 1;
     for(let y=cy-2; y<cy; y++) for(let x=cx-2; x<cx+cw+2; x++) tiles[y*MAP_W+x]=2;
     for(let y=cy+ch; y<cy+ch+2; y++) for(let x=cx-2; x<cx+cw+2; x++) tiles[y*MAP_W+x]=2;
     for(let y=cy-2; y<cy+ch+2; y++) for(let x=cx-2; x<cx; x++) tiles[y*MAP_W+x]=2;
     for(let y=cy-2; y<cy+ch+2; y++) for(let x=cx+cw; x<cx+cw+2; x++) tiles[y*MAP_W+x]=2;
-    // Bridge from docks across the eastern canal into the castle
-    const by = cy + Math.floor(ch*0.5);
-    for(let x=cx+cw-1; x<cx+cw+2; x++){
-      for(let y=by-1; y<=by+1; y++) tiles[y*MAP_W+x] = 1;
-    }
-    // Optional south bridge
-    const bsy = cy+ch; const bsx = cx + Math.floor(cw*0.35);
-    for(let y=bsy; y<bsy+2; y++){
-      for(let x=bsx-1; x<=bsx+1; x++) tiles[y*MAP_W+x]=1;
-    }
-    const bld = (bx,by,bw,bh)=> decor.push({t:'bld', x:(bx+0.5)*TILE, y:(by+0.5)*TILE, w:bw*TILE, h:bh*TILE});
-    bld(cx+2, cy+3, 8, 6); bld(cx+15, cy+3, 8, 6); bld(cx+28, cy+3, 6, 6);
-    bld(cx+3, cy+16, 10, 7); bld(cx+19, cy+16, 8, 7); bld(cx+29, cy+16, 8, 7);
-    ferryJ.x = (cx+cw+1)*TILE; ferryJ.y = (cy+ch+1)*TILE;
-    merchant.x = (cx+Math.floor(cw/2))*TILE; merchant.y = (cy+12)*TILE;
-    trainer.x = (cx+Math.floor(cw/2)-2)*TILE; trainer.y = (cy+10)*TILE;
-    storageNPC.x = (cx+Math.floor(cw/2)+3)*TILE; storageNPC.y = (cy+10)*TILE;
-    sign.x = (cx+Math.floor(cw/2))*TILE; sign.y = (cy+9)*TILE;
-    // Define the inner city rectangle as safe town (slightly expanded)
-    townZones.length = 0;
-    townZones.push({type:'rect', x:(cx-1)*TILE, y:(cy-1)*TILE, w:(cw+2)*TILE, h:(ch+2)*TILE});
+    const midY = cy + Math.floor(ch*0.5);
+    for(let x=cx+cw-1; x<cx+cw+2; x++){ for(let y=midY-1; y<=midY+1; y++) tiles[y*MAP_W+x] = 1; }
+    const southY = cy+ch; const southX = cx + Math.floor(cw*0.35);
+    for(let y=southY; y<southY+2; y++){ for(let x=southX-1; x<=southX+1; x++) tiles[y*MAP_W+x]=1; }
+    const placeBld=(bx,by,bw,bh)=> decor.push({t:'bld', x:(bx+0.5)*TILE, y:(by+0.5)*TILE, w:bw*TILE, h:bh*TILE});
+    placeBld(cx+4, cy+4, 8, 6); placeBld(cx+18, cy+4, 8, 6); placeBld(cx+30, cy+4, 6, 6);
+    placeBld(cx+5, cy+20, 10, 8); placeBld(cx+21, cy+20, 8, 8); placeBld(cx+31, cy+20, 8, 8);
+    const px=(cx+Math.floor(cw/2))*TILE, py=(cy+Math.floor(ch/2))*TILE, ring=TILE*4.5;
+    sign.x=px; sign.y=py - ring; merchant.x=px - ring; merchant.y=py+TILE*0.6; trainer.x=px+ring; trainer.y=py+TILE*0.6; storageNPC.x=px; storageNPC.y=py+ring;
+    townZones.length = 0; townZones.push({type:'rect', x:(cx-2)*TILE, y:(cy-2)*TILE, w:(cw+4)*TILE, h:(ch+4)*TILE});
     el('zone').textContent = MAPS.junon.label;
-    // Junon spawns (Patch 7): tougher mobs
-    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x]; if(tt===0||tt===1){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
-    spawnOut('moldy',44); spawnOut('moldy_elite',14); spawnOut('rockgolem',6);
-    // Simplify: Junon has a single portal → Luxem
-    portals.length = 0;
-    portals.push({kind:'npc', npc:'portal', x:(cx-2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'luxem', tag:'grove'});
+    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1600){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x]; if(tt===0||tt===1){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
+    spawnOut('moldy',36); spawnOut('moldy_elite',14); spawnOut('rockgolem',8);
+    portals.length = 0; portals.push({kind:'npc', npc:'portal', x:(cx-3)*TILE, y:py, r:22, dest:'luxem', tag:'grove'});
   }
 
   // Zant — desert village with sandy dunes
   function genZant(){
     for(let i=0;i<MAP_W*MAP_H;i++) tiles[i]=1; // sand base
-    const cx=20, cy=16, cw=26, ch=18;
+    const cx=22, cy=18, cw=28, ch=20;
     for(let y=cy; y<cy+ch; y++) for(let x=cx; x<cx+cw; x++) tiles[y*MAP_W+x] = 1;
-    // scatter rocks and sparse shrubs + new cacti/bones
     decor.length=0;
-    for(let i=0;i<90;i++) decor.push({t:'rock', x: rand(TILE*3, TILE*(MAP_W-3)), y: rand(TILE*3, TILE*(MAP_H-3))});
-    for(let i=0;i<24;i++) decor.push({t:'cactus', x: rand(TILE*3, TILE*(MAP_W-3)), y: rand(TILE*3, TILE*(MAP_H-3))});
-    for(let i=0;i<14;i++) decor.push({t:'bones', x: rand(TILE*3, TILE*(MAP_W-3)), y: rand(TILE*3, TILE*(MAP_H-3))});
-    // NPCs (plaza)
-    sign.x=(cx+Math.floor(cw/2))*TILE; sign.y=(cy+2)*TILE;
-    merchant.x=(cx+Math.floor(cw/2)-3)*TILE; merchant.y=(cy+8)*TILE;
-    trainer.x=(cx+Math.floor(cw/2)+3)*TILE; trainer.y=(cy+8)*TILE;
-    storageNPC.x=(cx+Math.floor(cw/2))*TILE; storageNPC.y=(cy+10)*TILE;
-    // town safe zone — rectangular plaza around NPCs
-    townZones.length=0; townZones.push({type:'rect', x:(cx-2)*TILE, y:(cy-3)*TILE, w:(cw+4)*TILE, h:(ch+6)*TILE});
+    for(let i=0;i<120;i++) decor.push({t:'rock', x: rand(TILE*3, TILE*(MAP_W-3)), y: rand(TILE*3, TILE*(MAP_H-3))});
+    for(let i=0;i<36;i++) decor.push({t:'cactus', x: rand(TILE*3, TILE*(MAP_W-3)), y: rand(TILE*3, TILE*(MAP_H-3))});
+    for(let i=0;i<20;i++) decor.push({t:'bones', x: rand(TILE*3, TILE*(MAP_W-3)), y: rand(TILE*3, TILE*(MAP_H-3))});
+    for(let y=cy-2; y<cy+2; y++) for(let x=cx+Math.floor(cw/2)-3; x<=cx+Math.floor(cw/2)+3; x++) tiles[y*MAP_W+x]=2;
+    const px=(cx+Math.floor(cw/2))*TILE, py=(cy+Math.floor(ch/2))*TILE, ring=TILE*4.2;
+    sign.x=px; sign.y=py - ring; merchant.x=px - ring; merchant.y=py+TILE*0.6; trainer.x=px+ring; trainer.y=py+TILE*0.6; storageNPC.x=px; storageNPC.y=py+ring;
+    townZones.length=0; townZones.push({type:'rect', x:(cx-3)*TILE, y:(cy-4)*TILE, w:(cw+6)*TILE, h:(ch+8)*TILE});
     el('zone').textContent = MAPS.zant.label;
-    // spawns outside town
     const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1600){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x]; if(tt===0||tt===1){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
-    // Ensure visibility: spawn a cluster near town edge
-    const ringSpawn=(t,count,rad)=>{let n=0,ang=0; while(n<count){ const wx=(cx+cw+3)*TILE + Math.cos(ang)*rad; const wy=(cy+Math.floor(ch/2))*TILE + Math.sin(ang)*rad; if(!isInTown(wx,wy)) { spawnMob(t,wx,wy); n++; } ang+=Math.PI*2/count; }};
-    spawnOut('woopie',32);
-    ringSpawn('woopie',6, TILE*8);
-    // Zant → El Verloon only (progression forward)
-    portals.length=0;
-    portals.push({kind:'npc', npc:'portal', x:(cx+Math.floor(cw/2))*TILE, y:(cy-2)*TILE, r:22, dest:'elverloon', tag:'oasis'});
+    const ringSpawn=(t,count,rad)=>{let n=0,ang=0; while(n<count){ const wx=px + Math.cos(ang)*rad; const wy=py + Math.sin(ang)*rad; if(!isInTown(wx,wy)) { spawnMob(t,wx,wy); n++; } ang+=Math.PI*2/count; }};
+    spawnOut('woopie',36); ringSpawn('woopie',8, TILE*10);
+    portals.length=0; portals.push({kind:'npc', npc:'portal', x:px, y:py - ring - TILE*3.2, r:22, dest:'elverloon', tag:'oasis'});
   }
 
   // El Verloon Desert — sandy open area with tougher mobs
   function genElVerloon(){
-    for(let i=0;i<MAP_W*MAP_H;i++) tiles[i]=1; // sand as dirt
-    // Create oases (water patches)
-    for(let i=0;i<4;i++){
-      const ox=(Math.random()*MAP_W)|0, oy=(Math.random()*MAP_H)|0;
-      for(let y=oy-3;y<=oy+3;y++) for(let x=ox-5;x<=ox+5;x++) if(x>=0&&y>=0&&x<MAP_W&&y<MAP_H) tiles[y*MAP_W+x]=2;
-    }
-    decor.length=0; for(let i=0;i<90;i++) decor.push({t:'rock', x: rand(TILE*3,TILE*(MAP_W-3)), y: rand(TILE*3,TILE*(MAP_H-3))});
-    // NPC cluster near an oasis
-    merchant.x = TILE*54; merchant.y = TILE*24; trainer.x = TILE*56; trainer.y = TILE*24; storageNPC.x = TILE*55; storageNPC.y = TILE*26; sign.x = TILE*54; sign.y = TILE*22;
-    townZones.length=0; townZones.push({type:'circle', x:TILE*54, y:TILE*24, r:TILE*6});
+    for(let i=0;i<MAP_W*MAP_H;i++) tiles[i]=1; // sand base
+    for(let i=0;i<5;i++){ const ox=(Math.random()*MAP_W)|0, oy=(Math.random()*MAP_H)|0; for(let y=oy-4;y<=oy+4;y++) for(let x=ox-6;x<=ox+6;x++) if(x>=0&&y>=0&&x<MAP_W&&y<MAP_H) tiles[y*MAP_W+x]=2; }
+    decor.length=0; for(let i=0;i<120;i++) decor.push({t:'rock', x: rand(TILE*3,TILE*(MAP_W-3)), y: rand(TILE*3,TILE*(MAP_H-3))});
+    // Town at a large oasis
+    const tx=54, ty=24; const px=tx*TILE, py=ty*TILE; const ring=TILE*4.0;
+    merchant.x = px - ring; merchant.y = py + TILE*0.6; trainer.x = px + ring; trainer.y = py + TILE*0.6; storageNPC.x = px; storageNPC.y = py + ring; sign.x = px; sign.y = py - ring;
+    townZones.length=0; townZones.push({type:'circle', x:px, y:py, r:TILE*10});
     el('zone').textContent = MAPS.elverloon.label;
     const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1600){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0||tt===1){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
-    spawnOut('woopie',40); spawnOut('moldy_elite',14); spawnOut('rockgolem',8);
-    portals.length=0; 
-    // Simplify: El Verloon → Junon only
-    portals.push({kind:'npc', npc:'portal', x:TILE*18, y:TILE*48, r:22, dest:'junon', tag:'gate'});
+    spawnOut('woopie',44); spawnOut('moldy_elite',16); spawnOut('rockgolem',10);
+    portals.length=0; portals.push({kind:'npc', npc:'portal', x:TILE*18, y:TILE*48, r:22, dest:'junon', tag:'gate'});
   }
 
 // Luxem Forest — dense trees, mid mobs
 function genLuxem(){
   for(let i=0;i<MAP_W*MAP_H;i++) tiles[i]=0;
-  // Dense forest patches
   decor.length=0;
   for(let y=0;y<MAP_H;y++){
     for(let x=0;x<MAP_W;x++){
-      if(Math.random()>0.94) decor.push({t:'tree', x:x*TILE+8+Math.random()*(TILE-16), y:y*TILE+8+Math.random()*(TILE-16)});
+      if(Math.random()>0.93) decor.push({t:'tree', x:x*TILE+8+Math.random()*(TILE-16), y:y*TILE+8+Math.random()*(TILE-16)});
       if(Math.random()>0.985) decor.push({t:'flower', x:x*TILE+10+Math.random()*(TILE-20), y:y*TILE+10+Math.random()*(TILE-20)});
     }
   }
-  // Creek
-  for(let y=10;y<MAP_H-10;y++) for(let x=24;x<27;x++) tiles[y*MAP_W+x]=2;
-  // NPC cluster at grove
-  const gx = 28, gy = 22; sign.x = gx*TILE; sign.y = (gy-2)*TILE; merchant.x = (gx+2)*TILE; merchant.y = gy*TILE; trainer.x = (gx-2)*TILE; trainer.y = gy*TILE; storageNPC.x = gx*TILE; storageNPC.y = (gy+2)*TILE;
-  townZones.length=0; townZones.push({type:'circle', x:gx*TILE, y:gy*TILE, r:TILE*6});
+  for(let y=8;y<MAP_H-8;y++) for(let x=22;x<26;x++) tiles[y*MAP_W+x]=2;
+  const gx = 28, gy = 22; const px=gx*TILE, py=gy*TILE; const ring=TILE*4.0;
+  sign.x = px; sign.y = py - ring; merchant.x = px + ring; merchant.y = py; trainer.x = px - ring; trainer.y = py; storageNPC.x = px; storageNPC.y = py + ring;
+  townZones.length=0; townZones.push({type:'circle', x:px, y:py, r:TILE*9});
   el('zone').textContent = MAPS.luxem.label;
-  // Spawns: choropy only (no Woopies in Luxem)
   const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1400){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
-  spawnOut('choropy',30);
-    portals.length=0;
-    // Luxem exits forward only → Zant (no direct Junon)
-    portals.push({kind:'npc', npc:'portal', x:(gx-6)*TILE, y:gy*TILE, r:22, dest:'zant', tag:'plaza'});
+  spawnOut('choropy',34);
+  portals.length=0; portals.push({kind:'npc', npc:'portal', x:(gx-6)*TILE, y:gy*TILE, r:22, dest:'zant', tag:'plaza'});
 }
 
   // Canyon (Gorge) — rocky ravines and plateaus, lv 20–30
   function genCanyon(){
-    for(let i=0;i<MAP_W*MAP_H;i++) tiles[i] = (Math.random()<0.15? 1: 0);
-    // carve canyon lines (dirt paths as ridges)
+    for(let i=0;i<MAP_W*MAP_H;i++) tiles[i] = (Math.random()<0.18? 1: 0);
     for(let y=8;y<MAP_H-8;y+=6){ for(let x=2;x<MAP_W-2;x++){ tiles[y*MAP_W+x]=1; } }
-    // town-like camp center
-    const cx=30, cy=24; merchant.x = (cx)*TILE; merchant.y = (cy)*TILE; trainer.x = (cx-3)*TILE; trainer.y = (cy)*TILE; storageNPC.x=(cx+3)*TILE; storageNPC.y=(cy)*TILE; sign.x=cx*TILE; sign.y=(cy-2)*TILE;
-    townZones.length=0; townZones.push({type:'rect', x:(cx-2)*TILE, y:(cy-2)*TILE, w:TILE*6, h:TILE*6});
+    const cx=30, cy=24; const px=cx*TILE, py=cy*TILE; const ring=TILE*3.8;
+    merchant.x = px + ring; merchant.y = py; trainer.x = px - ring; trainer.y = py; storageNPC.x=px; storageNPC.y=py + ring; sign.x=px; sign.y=py - ring;
+    townZones.length=0; townZones.push({type:'rect', x:(cx-3)*TILE, y:(cy-3)*TILE, w:TILE*8, h:TILE*8});
     el('zone').textContent = MAPS.canyon.label;
-    // spawns: golems and beetles
     const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1800){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x]; if(tt===0||tt===1){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
-    spawnOut('rockgolem',12); spawnOut('gorge_beetle',28);
-    portals.length=0; portals.push({kind:'npc', npc:'portal', x:(cx+8)*TILE, y:(cy+10)*TILE, r:22, dest:'junon', tag:'gate'});
+    spawnOut('rockgolem',16); spawnOut('gorge_beetle',30);
+    portals.length=0; portals.push({kind:'npc', npc:'portal', x:(cx+10)*TILE, y:(cy+10)*TILE, r:22, dest:'junon', tag:'gate'});
   }
 
   // Luna — icy plateaus and moonlit woods, lv 30–40
   function genLuna(){
     for(let i=0;i<MAP_W*MAP_H;i++) tiles[i] = 0;
-    // add ice lakes
     for(let y=12;y<22;y++) for(let x=20;x<32;x++){ tiles[y*MAP_W+x]=2; }
-    const cx=22, cy=18; merchant.x=(cx+2)*TILE; merchant.y=(cy+2)*TILE; trainer.x=(cx-2)*TILE; trainer.y=(cy+2)*TILE; storageNPC.x=cx*TILE; storageNPC.y=(cy+4)*TILE; sign.x=cx*TILE; sign.y=(cy)*TILE;
-    townZones.length=0; townZones.push({type:'rect', x:(cx-3)*TILE, y:(cy-3)*TILE, w:TILE*10, h:TILE*8});
+    for(let y=26;y<32;y++) for(let x=8;x<16;x++){ tiles[y*MAP_W+x]=2; }
+    const cx=22, cy=18; const px=cx*TILE, py=cy*TILE; const ring=TILE*3.6;
+    merchant.x=px + ring; merchant.y=py; trainer.x=px - ring; trainer.y=py; storageNPC.x=px; storageNPC.y=py + ring; sign.x=px; sign.y=py - ring;
+    townZones.length=0; townZones.push({type:'rect', x:(cx-4)*TILE, y:(cy-4)*TILE, w:TILE*12, h:TILE*10});
     el('zone').textContent = MAPS.luna.label;
     const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1800){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x]; if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
-    spawnOut('luna_wolf',24); spawnOut('luna_spirit',16);
-    portals.length=0; portals.push({kind:'npc', npc:'portal', x:(cx+10)*TILE, y:(cy+4)*TILE, r:22, dest:'eldeon', tag:'grove'});
+    spawnOut('luna_wolf',28); spawnOut('luna_spirit',18);
+    portals.length=0; portals.push({kind:'npc', npc:'portal', x:(cx+12)*TILE, y:(cy+4)*TILE, r:22, dest:'eldeon', tag:'grove'});
   }
 
   // Eldeon Glade — bioluminescent forest, lv 40–50
   function genEldeon(){
     for(let i=0;i<MAP_W*MAP_H;i++) tiles[i] = 0;
-    // water veins
     for(let y=8;y<MAP_H-8;y++) for(let x=14;x<17;x++){ tiles[y*MAP_W+x]=2; }
     for(let y=12;y<MAP_H-12;y++) for(let x=40;x<42;x++){ tiles[y*MAP_W+x]=2; }
-    // glowing decor clusters
-    decor.length=0; for(let i=0;i<160;i++){ decor.push({t:'flower', x:rand(TILE*3,TILE*(MAP_W-3)), y:rand(TILE*3,TILE*(MAP_H-3))}); }
-    const cx=24, cy=20; merchant.x=(cx+2)*TILE; merchant.y=(cy+2)*TILE; trainer.x=(cx-2)*TILE; trainer.y=(cy+2)*TILE; storageNPC.x=cx*TILE; storageNPC.y=(cy+4)*TILE; sign.x=cx*TILE; sign.y=(cy)*TILE;
-    townZones.length=0; townZones.push({type:'circle', x:cx*TILE, y:cy*TILE, r:TILE*6});
+    decor.length=0; for(let i=0;i<180;i++){ decor.push({t:'flower', x:rand(TILE*3,TILE*(MAP_W-3)), y:rand(TILE*3,TILE*(MAP_H-3))}); }
+    const cx=24, cy=20; const px=cx*TILE, py=cy*TILE; const ring=TILE*4.0;
+    merchant.x=px + ring; merchant.y=py; trainer.x=px - ring; trainer.y=py; storageNPC.x=px; storageNPC.y=py + ring; sign.x=px; sign.y=py - ring;
+    townZones.length=0; townZones.push({type:'circle', x:px, y:py, r:TILE*9});
     el('zone').textContent = MAPS.eldeon.label;
     const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<2200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x]; if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
-    spawnOut('spirit_archer',22); spawnOut('thornling',26);
-    // one treant mini-boss
+    spawnOut('spirit_archer',24); spawnOut('thornling',28);
     let tries=0; while(tries++<200){ const x=rand(TILE*8,TILE*(MAP_W-8)), y=rand(TILE*8,TILE*(MAP_H-8)); if(!isInTown(x,y)){ spawnMob('ancient_treant',x,y); break; } }
-    // forward portal → stub next
     portals.length=0; portals.push({kind:'npc', npc:'portal', x:(cx+14)*TILE, y:(cy-6)*TILE, r:22, dest:'canyon', tag:'rim'});
   }
 
@@ -2408,17 +2475,14 @@ function genLuxem(){
 
     // Interact (E)
     if(keys['e']){
-      if(nearest(sign)<TILE*1.2){ interactSign(); keys['e']=false; }
-      else if(nearest(merchant)<TILE*1.8){ openShop(); keys['e']=false; }
-      else if(nearest(trainer)<TILE*1.8){ openJobs(); keys['e']=false; }
-      // Map quest giver: press E near sign in non-plains maps to grab bounty
-      else if(nearest(sign)<TILE*1.8 && mapName!=='plains'){ openMapBounties(); keys['e']=false; }
-      else if(nearest(storageNPC)<TILE*1.8){ openStorage(); keys['e']=false; }
-      // Plains: no Cart Master at spawn
+      if(nearest(sign)<TILE*1.2){ openDialogue('sign'); keys['e']=false; }
+      else if(nearest(merchant)<TILE*1.8){ openDialogue('merchant'); keys['e']=false; }
+      else if(nearest(trainer)<TILE*1.8){ openDialogue('trainer'); keys['e']=false; }
+      else if(nearest(storageNPC)<TILE*1.8){ openDialogue('storage'); keys['e']=false; }
       else if(summonedCart && nearest(summonedCart)<TILE*1.8){ mountCart(); keys['e']=false; }
       else {
-        // Portals interaction
-        for(const p of portals){ if(dist(player.x,player.y,p.x,p.y)<(p.r||22)){ changeMap(p.dest, p.tag||'main'); keys['e']=false; break; } }
+        // Portals interaction → open dialogue to confirm travel
+        for(const p of portals){ if(dist(player.x,player.y,p.x,p.y)<(p.r||22)){ openDialogue('portal', p); keys['e']=false; break; } }
       }
     }
 
