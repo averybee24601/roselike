@@ -1292,8 +1292,9 @@ Later patches (not in this edit):
   const sign = {kind:'npc', npc:'sign', x:startPos.x+TILE*2.5, y:startPos.y- TILE*1.2, r:18};
   const merchant = {kind:'npc', npc:'merchant', x:startPos.x+TILE*5.5, y:startPos.y- TILE*0.3, r:22};
   const trainer = {kind:'npc', npc:'trainer', x:startPos.x+TILE*3.8, y:startPos.y+ TILE*0.4, r:22};
-  const cartMaster = {kind:'npc', npc:'cartmaster', x:startPos.x+TILE*0.8, y:startPos.y+ TILE*1.8, r:24};
-  const storageNPC = {kind:'npc', npc:'trainer', x:startPos.x+TILE*6.8, y:startPos.y+ TILE*1.0, r:22};
+  // Plains no longer has Cart Master at start; keep variable for other maps if needed (set to null here)
+  const cartMaster = null;
+  const storageNPC = {kind:'npc', npc:'storage', x:startPos.x+TILE*6.8, y:startPos.y+ TILE*1.0, r:22};
     // Boat NPC in plains is static object; ferryJ is placed in genJunon
 
   // Quests — Story progression + bounties
@@ -1687,7 +1688,7 @@ Later patches (not in this edit):
     ctx.fillText(hint, s.x, s.y-20);
   }
   function drawNPCSprites(){
-    const list=[sign, merchant, trainer, storageNPC, cartMaster];
+    const list=[sign, merchant, trainer, storageNPC];
     if(summonedCart) list.push(summonedCart);
     for(const p of portals){ list.push(p); }
     // depth sort by y
@@ -1705,29 +1706,48 @@ Later patches (not in this edit):
     for(let y=20;y<28;y++) for(let x=20;x<28;x++){ if((x-24)**2+(y-24)**2<16) tiles[y*MAP_W+x]=2; }
     decor.length=0;
     for(let y=0;y<MAP_H;y++){ for(let x=0;x<MAP_W;x++){
-      if(tiles[y*MAP_W+x]===0 && Math.random()>0.965) decor.push({t: Math.random()>0.6? 'tree':'rock', x:x*TILE+8+Math.random()*(TILE-16), y:y*TILE+8+Math.random()*(TILE-16)});
-      if(tiles[y*MAP_W+x]===0 && Math.random()>0.985) decor.push({t:'flower', x:x*TILE+10+Math.random()*(TILE-20), y:y*TILE+10+Math.random()*(TILE-20)});
+      if(tiles[y*MAP_W+x]===0 && Math.random()>0.955) decor.push({t: Math.random()>0.55? 'tree':'rock', x:x*TILE+8+Math.random()*(TILE-16), y:y*TILE+8+Math.random()*(TILE-16)});
+      if(tiles[y*MAP_W+x]===0 && Math.random()>0.975) decor.push({t:'flower', x:x*TILE+10+Math.random()*(TILE-20), y:y*TILE+10+Math.random()*(TILE-20)});
     }}
-    // Canyon-like spawn (north), town with central bonfire to the south
+    // Canyon-like spawn (north), town hub further to the right with a proper road
     const canyon = { x:startPos.x, y:startPos.y, r:TILE*5.2 };
-    // Canyon rim rocks
-    for(let k=0;k<22;k++){
-      const a = (k/22)*Math.PI*2; const rr = canyon.r + rand(-10,10);
-      const rx = canyon.x + Math.cos(a)*(rr+TILE*0.6);
-      const ry = canyon.y + Math.sin(a)*(rr+TILE*0.6);
+    // Canyon rim with layered rock walls and vegetation
+    for(let k=0;k<26;k++){
+      const a = (k/26)*Math.PI*2; const rr = canyon.r + rand(-8,12);
+      const rx = canyon.x + Math.cos(a)*(rr+TILE*0.7);
+      const ry = canyon.y + Math.sin(a)*(rr+TILE*0.7);
       decor.push({t:'rock', x:rx, y:ry});
     }
-    // South path from canyon to town
-    const pathTx = Math.floor(canyon.x/TILE);
-    const pathTy0 = Math.floor(canyon.y/TILE)+3;
-    const townYTile = pathTy0 + 12;
-    for(let ty=pathTy0; ty<townYTile; ty++){
-      for(let dx=-1; dx<=1; dx++){
-        const tx = pathTx+dx; if(tx>1 && tx<MAP_W-1 && ty>1 && ty<MAP_H-1) tiles[ty*MAP_W+tx] = 1;
+    for(let k=0;k<18;k++){
+      const a = (k/18)*Math.PI*2; const rr = canyon.r + TILE*1.4 + rand(-10,10);
+      const rx = canyon.x + Math.cos(a)*rr;
+      const ry = canyon.y + Math.sin(a)*rr;
+      if(Math.random()<0.6) decor.push({t:'tree', x:rx, y:ry}); else decor.push({t:'rock', x:rx, y:ry});
+    }
+    // L-shaped path from canyon exit → eastwards → down into town
+    const pathWidth = 2; // thicker than before
+    const spawnTx = Math.floor(canyon.x / TILE);
+    const spawnTy = Math.floor(canyon.y / TILE);
+    const eastLenTiles = 14; // move hub to the right
+    const elbowTx = Math.min(MAP_W-3, spawnTx + eastLenTiles);
+    const startTy = spawnTy + 3; // slight south out of canyon
+    const townYTile = startTy + 12;
+    // horizontal segment (east)
+    for(let tx = Math.min(spawnTx, elbowTx); tx <= Math.max(spawnTx, elbowTx); tx++){
+      for(let dy = -pathWidth; dy <= pathWidth; dy++){
+        const ty = startTy + dy; if(tx>1 && tx<MAP_W-1 && ty>1 && ty<MAP_H-1) tiles[ty*MAP_W+tx] = 1;
       }
     }
-    // Town center south of canyon
-    const town = { x: canyon.x, y: (townYTile)*TILE };
+    // vertical segment (south)
+    for(let ty = Math.min(startTy, townYTile); ty <= Math.max(startTy, townYTile); ty++){
+      for(let dx = -pathWidth; dx <= pathWidth; dx++){
+        const tx = elbowTx + dx; if(tx>1 && tx<MAP_W-1 && ty>1 && ty<MAP_H-1) tiles[ty*MAP_W+tx] = 1;
+      }
+    }
+    // decorative canyon gate at exit (two pillars framing the road)
+    decor.push({t:'gate', x: elbowTx*TILE, y: (startTy-1)*TILE });
+    // Town center placed to the right to avoid edge clipping
+    const town = { x: elbowTx*TILE, y: (townYTile)*TILE };
     plainsTownCenter = {x: town.x, y: town.y};
     decor.push({t:'bonfire', x:town.x, y:town.y});
     // Plaza stone around bonfire
@@ -1741,7 +1761,6 @@ Later patches (not in this edit):
     merchant.x = town.x - ring; merchant.y = town.y + TILE*0.6;
     trainer.x = town.x + ring; trainer.y = town.y + TILE*0.6;
     storageNPC.x = town.x; storageNPC.y = town.y + ring;
-    cartMaster.x = town.x - TILE*3.6; cartMaster.y = town.y + TILE*2.6;
     // Buildings behind each NPC (placed away from bonfire)
     placeBld(sign.x, sign.y - TILE*2.2, 3, 2, {roof:'#3f7aa6'}); // bluish roof north
     placeBld(merchant.x - TILE*2.8, merchant.y, 4, 3, {roof:'#a84f3c'}); // red roof west
@@ -1749,6 +1768,10 @@ Later patches (not in this edit):
     placeBld(trainer.x + TILE*2.8, trainer.y, 4, 3, {roof:'#7aa63f'}); // green roof east
     placeStall(trainer.x + TILE*1.0, trainer.y - TILE*0.6, '#4a8ac9');
     placeBld(storageNPC.x, storageNPC.y + TILE*2.4, 4, 3, {roof:'#a68b3f'}); // ochre roof south
+    // Place a few standing stone pillars around the canyon for a proper "spawn ring"
+    for(let k=0;k<6;k++){
+      const a = (k/6)*Math.PI*2; const rr = canyon.r*0.85; const px = canyon.x + Math.cos(a)*rr; const py = canyon.y + Math.sin(a)*rr; decor.push({t:'pillar', x:px, y:py});
+    }
     // Safe zones: canyon spawn and town circle — prevents Jelly Beans in both
     townZones.length = 0;
     townZones.push({type:'circle', x:canyon.x, y:canyon.y, r:canyon.r});
@@ -1758,10 +1781,10 @@ Later patches (not in this edit):
     const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<2200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy) && dist(wx,wy,startPos.x,startPos.y)>TILE*26 && (!plainsTownCenter || dist(wx,wy,plainsTownCenter.x,plainsTownCenter.y)>TILE*20)){ spawnMob(t,wx,wy); n++; }}}};
     const spawnFar=(t,count,minDist)=>{let n=0,tries=0;while(n<count&&tries<2400){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; const md=(minDist||TILE*28); if(!isInTown(wx,wy) && dist(wx,wy,startPos.x,startPos.y)>md && (!plainsTownCenter || dist(wx,wy,plainsTownCenter.x,plainsTownCenter.y)>TILE*22)){ spawnMob(t,wx,wy); n++; }}}};
     // Jelly Beans only outside town/canyon
-    spawnOut('jelly',18);
+    spawnOut('jelly',22);
     // Choropy ring further out
-    spawnFar('choropy',16, TILE*22);
-    // Portal away from canyon and town (west road)
+    spawnFar('choropy',18, TILE*28);
+    // Portal on the west road, still reachable but not crowding the plaza
     portals.length = 0;
     portals.push({kind:'npc', npc:'portal', x: town.x - TILE*12, y: town.y, r:22, dest:'luxem', tag:'grove'});
     // If story quest is at travel step to Luxem, mark it complete on arrival there (handled on map change)
@@ -2351,8 +2374,8 @@ function genLuxem(){
       else if(nearest(trainer)<TILE*1.8){ openJobs(); keys['e']=false; }
       // Map quest giver: press E near sign in non-plains maps to grab bounty
       else if(nearest(sign)<TILE*1.8 && mapName!=='plains'){ openMapBounties(); keys['e']=false; }
-      else if(nearest(storageNPC)<TILE*1.8){ openJobs(); keys['e']=false; }
-      else if(nearest(cartMaster)<TILE*1.8){ interactCartMaster(); keys['e']=false; }
+      else if(nearest(storageNPC)<TILE*1.8){ openStorage(); keys['e']=false; }
+      // Plains: no Cart Master at spawn
       else if(summonedCart && nearest(summonedCart)<TILE*1.8){ mountCart(); keys['e']=false; }
       else {
         // Portals interaction
@@ -2521,10 +2544,13 @@ function genLuxem(){
         if(x<0||y<0||x>=MAP_W||y>=MAP_H) continue; const t=tiles[y*MAP_W+x]; const px = x*TILE - camera.x; const py=y*TILE - camera.y;
         if(t===0){ // grass
           const g = ctx.createLinearGradient(0, py, 0, py+TILE);
-          g.addColorStop(0, '#174a2a'); g.addColorStop(1, '#10311f');
+          g.addColorStop(0, '#1b5a36'); g.addColorStop(1, '#124428');
           ctx.fillStyle = g; ctx.fillRect(px,py,TILE,TILE);
-          ctx.fillStyle = 'rgba(255,255,255,0.03)';
+          // stripes + noise speckles for depth
+          ctx.fillStyle = 'rgba(255,255,255,0.028)';
           for(let i=0;i<3;i++){ ctx.fillRect(px+4+i*16, py+2, 6, TILE-4); }
+          ctx.fillStyle = 'rgba(0,0,0,0.03)';
+          for(let i=0;i<4;i++){ const nx=px+Math.random()*TILE, ny=py+Math.random()*TILE; ctx.fillRect(nx,ny,1,1); }
         }else if(t===1){ // dirt or sand (map-dependent)
           if(mapName==='zant' || mapName==='elverloon'){
             // sandy tile with muted tones and dune shading
@@ -2569,7 +2595,17 @@ function genLuxem(){
     for(const d of decor){
       const s=worldToScreen(d.x,d.y); if(s.x<-50||s.y<-50||s.x>vw+50||s.y>vh+50) continue;
       if(d.t==='tree'){
-        ctx.fillStyle='#0f3925'; ctx.beginPath(); ctx.arc(s.x,s.y,20,0,6.28); ctx.fill(); ctx.fillStyle='#205b3a'; ctx.beginPath(); ctx.arc(s.x-8,s.y-10,18,0,6.28); ctx.fill();
+        // Trunk
+        ctx.fillStyle = '#7a5a3a';
+        ctx.fillRect(s.x-4, s.y-18, 8, 22);
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        ctx.fillRect(s.x-4, s.y-18, 8, 2);
+        // Layered canopy (ROSE-like round leaves, multi-tone)
+        const drawBlob=(dx,dy,r,col)=>{ ctx.fillStyle=col; ctx.beginPath(); ctx.arc(s.x+dx, s.y-22+dy, r, 0, Math.PI*2); ctx.fill(); };
+        drawBlob(0, 0, 22, '#2f6a43');
+        drawBlob(-10,-6,18, '#29613b');
+        drawBlob(12,-8,16, '#33724a');
+        drawBlob(-4,10,16, '#2a5d3d');
       } else if(d.t==='rock'){
         ctx.fillStyle = (mapName==='zant'||mapName==='elverloon')? '#5b5242':'#3b4653';
         ctx.beginPath(); ctx.arc(s.x,s.y,10,0,6.28); ctx.fill();
@@ -2641,6 +2677,21 @@ function genLuxem(){
         // flame body
         ctx.fillStyle='#ffa24a'; ctx.beginPath(); ctx.ellipse(s.x, s.y-6+bob, 8, 14, 0, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle='#ffd24a'; ctx.beginPath(); ctx.ellipse(s.x, s.y-10+bob, 5, 8, 0, 0, Math.PI*2); ctx.fill();
+      } else if(d.t==='pillar'){
+        // Standing stone pillar (spawn ring)
+        const w = 10, h = 30; const x0 = s.x - w/2, y0 = s.y - h;
+        ctx.fillStyle = '#8a7a62'; ctx.fillRect(x0, y0, w, h);
+        ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(x0, y0, w, 3);
+        ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.strokeRect(x0+0.5, y0+0.5, w-1, h-1);
+      } else if(d.t==='gate'){
+        // Canyon gate: two larger pillars flanking the road
+        const gap = TILE*1.8; const pw=14, ph=42;
+        ctx.fillStyle = '#9a8a72';
+        ctx.fillRect(s.x-gap/2 - pw, s.y-ph, pw, ph);
+        ctx.fillRect(s.x+gap/2,      s.y-ph, pw, ph);
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.fillRect(s.x-gap/2 - pw, s.y-ph, pw, 3);
+        ctx.fillRect(s.x+gap/2,      s.y-ph, pw, 3);
       } else if(d.t==='cactus'){
         // simple saguaro
         ctx.fillStyle='#3f7d3a';
@@ -3212,4 +3263,5 @@ function genLuxem(){
 })();
 </script>
 </body>
+</html>
 </html>
