@@ -63,6 +63,7 @@ Later patches (not in this edit):
   .quest{position:absolute; right:12px; top:12px; background:var(--ui-bg); padding:10px 12px; border-radius:14px; width:min(420px, 96vw);} 
   /* Minimap */
   .minimap{position:absolute; left:12px; top:110px; width:180px; height:120px; background:var(--ui-bg); border-radius:10px; box-shadow:0 6px 20px rgba(0,0,0,.25); pointer-events:none;}
+  .minimap-label{position:absolute; left:12px; top:236px; background:var(--ui-bg); border:1px solid rgba(255,255,255,.12); padding:4px 8px; border-radius:10px; font-size:12px;}
   .quest h3{margin:0 0 4px 0; font-size:14px; letter-spacing:.3px}
   .quest p{margin:2px 0; font-size:13px; color:#cde}
 
@@ -178,6 +179,7 @@ Later patches (not in this edit):
     </div>
 
     <canvas id="minimap" class="minimap"></canvas>
+    <div id="minimapLabel" class="minimap-label"></div>
 
     <div class="quest" aria-live="polite">
       <h3>Quest Tracker</h3>
@@ -304,7 +306,7 @@ Later patches (not in this edit):
 
   <div class="window" id="shopWin">
     <button class="close" id="shopClose">✕</button>
-    <h2>Merchant 🛒 — Marketer of the Plains <span class="pill">Gold <span id="shopGold">0</span> ✦</span></h2>
+    <h2>Merchant 🛒 — <span id="shopMapLabel">Region</span> <span class="pill">Gold <span id="shopGold">0</span> ✦</span></h2>
     <div class="list" id="shopList"></div>
     <p style="opacity:.8; margin-top:8px">Tip: Quests pay <b>Gold</b> — spend it at the <b>Merchant</b>. Finish the <b>Cart License</b> quest to ride.</p>
   </div>
@@ -372,6 +374,7 @@ Later patches (not in this edit):
   const ctx = canvas.getContext('2d');
   const minimapCanvas = el('minimap');
   const mapCtx = minimapCanvas.getContext && el('minimap').getContext? el('minimap').getContext('2d'):null;
+  const minimapLabel = el('minimapLabel');
   const hpEl = el('hp'), mpEl = el('mp'), xpEl = el('xp');
   const lvEl = el('lv'), goldEl = el('gold'), nextxpEl = el('nextxp');
   const MAX_LEVEL = 50;
@@ -654,7 +657,7 @@ Later patches (not in this edit):
   const SHOP_STOCK_HIGH=['potion_hp','potion_mp','iron_sword','composite_bow','fine_katar','battle_staff','mystic_wand','steel_armor','swift_boots','power_candy','angel_wings','dragon_worm_wings','mechanical_wings','feather_wings','helmet_knight','ring_gold','cloak_royal','wood_2h_sword'];
 
   // Map → allowed item-level range for shop/drops
-  const MAP_ITEM_LEVELS = { plains:[1,5], zant:[5,10], junon:[10,15] };
+  const MAP_ITEM_LEVELS = { plains:[1,5], zant:[5,10], elverloon:[5,15], junon:[15,20], canyon:[20,30], luna:[30,40] };
   function itemAllowedInMap(it){
     if(!it) return false;
     if(it.type !== 'gear') return true; // consumables etc always allowed
@@ -666,10 +669,6 @@ Later patches (not in this edit):
   function getShopStock(){
     const base = (mapName==='plains')? SHOP_STOCK_BASE : (mapName==='junon'? (player.level>=10? SHOP_STOCK_HIGH : SHOP_STOCK_MID) : SHOP_STOCK_MID);
     return base.filter(id=> itemAllowedInMap(ITEM_DB[id]));
-  }
-  function getAllShopStock(){
-    const set = new Set([...SHOP_STOCK_BASE, ...SHOP_STOCK_MID, ...SHOP_STOCK_HIGH]);
-    return Array.from(set);
   }
 
   // Item icon inline SVG (minimal, readable)
@@ -839,13 +838,17 @@ Later patches (not in this edit):
 
   function openInventory(){ invWin.style.display='block'; renderInventory(); }
   function closeInventory(){ invWin.style.display='none'; }
-  function openShop(all=false){ shopGold.textContent = player.gold|0; shopList.innerHTML=''; (all? getAllShopStock() : getShopStock()).forEach(id=>{
+  function openShop(){ shopGold.textContent = player.gold|0; shopList.innerHTML=''; getShopStock().forEach(id=>{
       const it=ITEM_DB[id]; const div=document.createElement('div'); div.className='item';
       const icon = getItemIconSVG(id);
       div.innerHTML=`<div style=\"display:flex;align-items:center\"><span class=\"icon\">${icon}</span><div><b>${it.name}</b> <span class=\"pill\">${it.type}</span> <span class=\"pill\">${it.price}✦</span> ${(it.reqLv?`<span class=\"pill\">Req ${it.reqLv}</span>`:'')} ${(it.ilvl?`<span class=\"pill\">iLv ${it.ilvl}</span>`:'')}<div style=\"font-size:12px; opacity:.85; margin-top:4px\">${statsText(it)}</div>${(it.type==='gear' && !canEquip(it))? `<div style=\\"font-size:12px;color:#f88;margin-top:4px\\">Requires Lv ${it.reqLv||1}</div>`:''}</div></div>`;
       const actions=document.createElement('div'); const btn=document.createElement('button'); btn.textContent='Buy'; btn.onclick=()=>{ if(player.gold>=it.price){ player.gold-=it.price; addToInv(id,1); shopGold.textContent=player.gold|0; goldEl.textContent=player.gold|0; notify('Purchased '+it.name); } else notify('Not enough gold'); };
       actions.appendChild(btn); shopList.appendChild(div); shopList.appendChild(actions);
-    }); shopWin.style.display='block'; shopList.scrollTop=0; ttsSay('Hello fellow rosarian, i have some items that may help ease your journey'); }
+    });
+    const lbl = (mapName==='plains')? 'Adventure Plains' : (mapName==='zant'? 'Zant' : (mapName==='junon'? 'Junon Polis' : (mapName==='elverloon'? 'El Verloon Desert' : 'Merchant')));
+    const range = MAP_ITEM_LEVELS[mapName] || [1, MAX_LEVEL];
+    const shopMapLabel = document.getElementById('shopMapLabel'); if(shopMapLabel) shopMapLabel.textContent = `${lbl} Shop (Lv ${range[0]}–${range[1]})`;
+    shopWin.style.display='block'; shopList.scrollTop=0; ttsSay('Hello fellow rosarian, i have some items that may help ease your journey'); }
   function closeShop(){ shopWin.style.display='none'; }
   invClose.onclick=closeInventory; shopClose.onclick=closeShop; jobClose.onclick=()=>jobWin.style.display='none'; statsClose.onclick=()=>statsWin.style.display='none'; storageClose.onclick=()=>storageWin.style.display='none';
 
@@ -1294,7 +1297,7 @@ Later patches (not in this edit):
   const keys={};
   addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); keys[k]=true; if(e.key===' '){e.preventDefault();}
     if(e.altKey && ((e.key==='S'||k==='s') || (e.key==='A'||k==='a'))){ if(typeof openSkills==='function') openSkills(); }
-    if(e.altKey && (e.key==='M' || k==='m')){ if(shopWin.style.display==='block'){ shopWin.style.display='none'; } else { openShop(true); } }
+    if(e.altKey && (e.key==='M' || k==='m')){ if(shopWin.style.display==='block'){ shopWin.style.display='none'; } else { openShop(); } }
     if(e.altKey && (e.key==='L' || k==='l')){ if(storageWin.style.display==='block'){ storageWin.style.display='none'; } else { openStorage(); } }
     if(e.altKey && (e.key==='J' || k==='j')){ openJobGuide(); }
     if(e.altKey && (e.key==='C' || k==='c')){ if(charWin && charWin.style.display==='block'){ closeCharacter(); } else { openCharacter(); } }
@@ -1540,8 +1543,8 @@ Later patches (not in this edit):
   let mapName = 'plains';
   let transition = {a:0,to:null};
 
-  const harbor  = {kind:'npc', npc:'harbor', x: TILE*12.0, y: TILE*9.6,  r:26};  // plains dock
-  const ferryJ  = {kind:'npc', npc:'ferryJ', x: TILE*44.0, y: TILE*58.0, r:26};  // junon dock
+  const harbor  = {kind:'npc', npc:'harbor', x: TILE*12.0, y: TILE*9.6,  r:26};  // plains dock (now to Zant)
+  const ferryJ  = {kind:'npc', npc:'ferryJ', x: TILE*44.0, y: TILE*58.0, r:26};  // junon dock (unused travel now)
   let ferryCost = 60;
 
   const MAPS = {
@@ -1549,7 +1552,9 @@ Later patches (not in this edit):
     junon:  { label:'Junon Polis',      gen: genJunon,   spawn:{dock:{x: TILE*44, y: TILE*58}, gate:{x:TILE*20, y:TILE*28}} },
     zant:   { label:'Zant',             gen: genZant,    spawn:{plaza:{x:TILE*24, y:TILE*18}, gate:{x:TILE*10, y:TILE*34}} },
     elverloon:{ label:'El Verloon Desert', gen: genElVerloon, spawn:{oasis:{x:TILE*54, y:TILE*24}, dune:{x:TILE*18, y:TILE*48}} },
-    luxem: { label:'Luxem Forest', gen: genLuxem, spawn:{grove:{x:TILE*28,y:TILE*22}, path:{x:TILE*10,y:TILE*36}} }
+    luxem: { label:'Luxem Forest', gen: genLuxem, spawn:{grove:{x:TILE*28,y:TILE*22}, path:{x:TILE*10,y:TILE*36}} },
+    canyon: { label:'Gorge Canyon', gen: genCanyon, spawn:{rim:{x:TILE*28,y:TILE*14}, basin:{x:TILE*52,y:TILE*48}} },
+    luna: { label:'Luna', gen: genLuna, spawn:{landing:{x:TILE*22,y:TILE*20}, ridge:{x:TILE*40,y:TILE*36}} }
   };
 
   function saveMeta(){ try{ localStorage.setItem('ap-meta', JSON.stringify({mapName})); }catch(e){} }
@@ -1579,13 +1584,15 @@ Later patches (not in this edit):
     else if(mapName==='junon'){ need('moldy',40); need('moldy_elite',12); need('rockgolem',6); }
     else if(mapName==='elverloon'){ need('woopie',34); need('moldy_elite',12); need('rockgolem',6); }
     else if(mapName==='luxem'){ need('choropy',28); }
+    else if(mapName==='canyon'){ need('rockgolem',16); need('gorge_beetle',24); }
+    else if(mapName==='luna'){ need('luna_wolf',26); need('luna_spirit',16); }
   }
 
   function interactHarbor(){
     if(mapName==='plains'){
       if((player.gold|0) < ferryCost){ notify(`Boat fare is ${ferryCost}✦`); return; }
-      player.gold -= ferryCost; notify('Setting sail for Junon Polis…'); changeMap('junon','dock'); save();
-    } else {
+      player.gold -= ferryCost; notify('Traveling to Zant…'); changeMap('zant','plaza'); save();
+    } else if(mapName==='zant'){
       const back = Math.floor(ferryCost*0.5);
       if((player.gold|0) < back){ notify(`Return fare is ${back}✦`); return; }
       player.gold -= back; notify('Returning to Adventure Plains…'); changeMap('plains','main'); save();
@@ -1642,8 +1649,7 @@ Later patches (not in this edit):
   function drawNPCSprites(){
     const list=[sign, merchant, trainer, storageNPC, cartMaster];
     if(summonedCart) list.push(summonedCart);
-    if(mapName==='plains') list.push(harbor);
-    if(mapName==='junon') list.push(ferryJ);
+    if(mapName==='plains' || mapName==='zant') list.push(harbor);
     for(const p of portals){ list.push(p); }
     // depth sort by y
     list.sort((a,b)=>a.y-b.y);
@@ -1712,11 +1718,9 @@ Later patches (not in this edit):
     // Junon spawns (Patch 7): tougher mobs
     const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x]; if(tt===0||tt===1){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
     spawnOut('moldy',44); spawnOut('moldy_elite',14); spawnOut('rockgolem',6);
-    // Portal to El Verloon
+    // Portals from Junon: keep Luxem only (El Verloon moved to Zant)
     portals.length = 0;
-  portals.push({kind:'npc', npc:'portal', x:(cx+cw+1)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'elverloon', tag:'oasis'});
-  // Junon → Luxem Forest
-  portals.push({kind:'npc', npc:'portal', x:(cx-2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'luxem', tag:'grove'});
+    portals.push({kind:'npc', npc:'portal', x:(cx-2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'luxem', tag:'grove'});
   }
 
   // Zant — desert village with sandy dunes
@@ -1743,12 +1747,12 @@ Later patches (not in this edit):
     const ringSpawn=(t,count,rad)=>{let n=0,ang=0; while(n<count){ const wx=(cx+cw+3)*TILE + Math.cos(ang)*rad; const wy=(cy+Math.floor(ch/2))*TILE + Math.sin(ang)*rad; if(!isInTown(wx,wy)) { spawnMob(t,wx,wy); n++; } ang+=Math.PI*2/count; }};
     spawnOut('woopie',32);
     ringSpawn('woopie',6, TILE*8);
-    // portals: Zant → Plains, Zant → Junon
+    // portals: Zant ↔ Plains, Zant → Junon, Zant → El Verloon
     portals.length=0;
     portals.push({kind:'npc', npc:'portal', x:(cx-2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'plains', tag:'main'});
-  portals.push({kind:'npc', npc:'portal', x:(cx+cw+2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'junon', tag:'gate'});
-  // Zant → Luxem Forest (alt path)
-  portals.push({kind:'npc', npc:'portal', x:(cx+Math.floor(cw/2))*TILE, y:(cy-2)*TILE, r:22, dest:'luxem', tag:'path'});
+    portals.push({kind:'npc', npc:'portal', x:(cx+cw+2)*TILE, y:(cy+Math.floor(ch/2))*TILE, r:22, dest:'junon', tag:'gate'});
+    // Move El Verloon portal here (from Junon)
+    portals.push({kind:'npc', npc:'portal', x:(cx+Math.floor(cw/2))*TILE, y:(cy-2)*TILE, r:22, dest:'elverloon', tag:'oasis'});
   }
 
   // El Verloon Desert — sandy open area with tougher mobs
@@ -1766,9 +1770,12 @@ Later patches (not in this edit):
     el('zone').textContent = MAPS.elverloon.label;
     const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<1600){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0||tt===1){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; }}}};
     spawnOut('woopie',40); spawnOut('moldy_elite',14); spawnOut('rockgolem',8);
-    portals.length=0; portals.push({kind:'npc', npc:'portal', x:TILE*18, y:TILE*48, r:22, dest:'junon', tag:'gate'});
-  // El Verloon → Luxem Forest secret portal
-  portals.push({kind:'npc', npc:'portal', x:TILE*56, y:TILE*22, r:22, dest:'luxem', tag:'grove'});
+    portals.length=0; 
+    // El Verloon ↔ Junon (unchanged)
+    portals.push({kind:'npc', npc:'portal', x:TILE*18, y:TILE*48, r:22, dest:'junon', tag:'gate'});
+    // El Verloon → Junon teleporter replaces Plains→Junon boat
+    // Secret to Luxem stays
+    portals.push({kind:'npc', npc:'portal', x:TILE*56, y:TILE*22, r:22, dest:'luxem', tag:'grove'});
   }
 
 // Luxem Forest — dense trees, mid mobs
@@ -2524,6 +2531,8 @@ function genLuxem(){
       // camera rectangle
       mapCtx.strokeStyle='rgba(255,255,255,0.35)'; mapCtx.lineWidth=1;
       mapCtx.strokeRect(camera.x*scaleX, camera.y*scaleY, vw*scaleX, vh*scaleY);
+      // Minimap label: map name + level range
+      if(minimapLabel){ const lbl = (mapName==='plains')? 'Adventure Plains' : (mapName==='zant'? 'Zant' : (mapName==='junon'? 'Junon Polis' : (mapName==='elverloon'? 'El Verloon Desert' : ''))); const range = MAP_ITEM_LEVELS[mapName] || [1, MAX_LEVEL]; minimapLabel.textContent = `${lbl}${lbl? ' · ':''}Lv ${range[0]}–${range[1]}`; }
     }
   }
 
