@@ -1,0 +1,29 @@
+{
+  "name": "airose",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@gltf-transform/cli": "^4.2.1",
+    "@testing-library/jest-dom": "^6.7.0",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^24.2.1",
+    "eslint": "^9.33.0",
+    "playwright": "^1.54.2",
+    "prettier": "^3.6.2",
+    "typescript": "~5.8.3",
+    "vite": "^7.1.2",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@babylonjs/loaders": "^8.23.0",
+    "babylonjs": "^8.23.0",
+    "zod": "^4.0.17",
+    "zustand": "^5.0.7"
+  }
+}
