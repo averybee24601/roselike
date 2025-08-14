@@ -556,7 +556,7 @@ Later patches (not in this edit):
   // World
   const TILE=56; 
   const MAP_W=90, MAP_H=70; // ~ 5040x3920px
-  const startPos = {x: TILE*4, y: TILE*6};
+  const startPos = {x: TILE*(MAP_W-22), y: TILE*(MAP_H-24)};
   let camera = {x:0,y:0};
 
   // Simple seeded PRNG for consistent decor
@@ -567,6 +567,10 @@ Later patches (not in this edit):
   const townZones = [];
   // Plains-specific town center reference for spawn buffers
   let plainsTownCenter = null;
+  // Plains-specific Flaenae hill reference for constrained spawning
+  let plainsFlaenaeHill = null;
+  // Plains cave marker (for minimap only)
+  let plainsCave = null;
   for(let y=0;y<MAP_H;y++){
     for(let x=0;x<MAP_W;x++){
       let idx=y*MAP_W+x;
@@ -1583,7 +1587,7 @@ Later patches (not in this edit):
   // let ferryCost = 60;
 
   const MAPS = {
-    plains: { label:'Adventure Plains', gen: genPlains,  spawn:{main:{x: TILE*4, y: TILE*6}} },
+    plains: { label:'Adventure Plains', gen: genPlains,  spawn:{main:{x: TILE*(MAP_W-22), y: TILE*(MAP_H-24)}} },
     junon:  { label:'Junon Polis',      gen: genJunon,   spawn:{dock:{x: TILE*44, y: TILE*58}, gate:{x:TILE*20, y:TILE*28}} },
     zant:   { label:'Zant',             gen: genZant,    spawn:{plaza:{x:TILE*24, y:TILE*18}, gate:{x:TILE*10, y:TILE*34}} },
     elverloon:{ label:'El Verloon Desert', gen: genElVerloon, spawn:{oasis:{x:TILE*54, y:TILE*24}, dune:{x:TILE*18, y:TILE*48}} },
@@ -1622,12 +1626,16 @@ Later patches (not in this edit):
     for(const e of ents){ if(!e.alive) continue; countByType[e.type] = (countByType[e.type]|0) + 1; }
     const need=(type,target)=>{ const have=countByType[type]|0; const missing=Math.max(0,target-have); for(let i=0;i<missing;i++){ let tries=0; while(tries++<800){ const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0; const tt=tiles[y*MAP_W+x]; if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy)){ spawnMob(type,wx,wy); break; } } } } };
     if(mapName==='plains'){
-      // stronger buffers on plains to keep mobs away from canyon and town
+      // stronger buffers on plains to keep mobs away from canyon, town, and dock
       const oldIsInTown = isInTown;
-      const guard = (wx,wy)=> oldIsInTown(wx,wy) || (dist(wx,wy,startPos.x,startPos.y)>TILE*26 && (!plainsTownCenter || dist(wx,wy,plainsTownCenter.x,plainsTownCenter.y)>TILE*20));
+      const guard = (wx,wy)=> oldIsInTown(wx,wy) || (dist(wx,wy,startPos.x,startPos.y)>TILE*32 && (!plainsTownCenter || dist(wx,wy,plainsTownCenter.x,plainsTownCenter.y)>TILE*26));
       const oldSpawn = spawnMob;
       const needGuarded=(type,target)=>{ const have=countByType[type]|0; const missing=Math.max(0,target-have); for(let i=0;i<missing;i++){ let tries=0; while(tries++<1200){ const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0; const tt=tiles[y*MAP_W+x]; if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(guard(wx,wy)){ oldSpawn(type,wx,wy); break; } } } } };
+      // Constrain Flaenae to their hill landmark region
+      const needInRegion=(type,target,cx,cy,rad)=>{ const have=countByType[type]|0; const missing=Math.max(0,target-have); for(let i=0;i<missing;i++){ let tries=0; while(tries++<1400){ const ang=Math.random()*Math.PI*2; const rr= (Math.random()*0.85+0.15) * rad; const wx=cx+Math.cos(ang)*rr, wy=cy+Math.sin(ang)*rr; const tx=(wx/TILE)|0, ty=(wy/TILE)|0; if(tx>=0&&ty>=0&&tx<MAP_W&&ty<MAP_H && tiles[ty*MAP_W+tx]===0 && !oldIsInTown(wx,wy)){ oldSpawn(type,wx,wy); break; } } } };
       needGuarded('jelly',16); needGuarded('choropy',12);
+      // ensure a baseline of Flaenae if hill defined
+      if(plainsFlaenaeHill){ needInRegion('flanae', Math.min( (GRAPHICS&&GRAPHICS.caps&&GRAPHICS.caps.flaenae)||8, 10), plainsFlaenaeHill.x, plainsFlaenaeHill.y, plainsFlaenaeHill.r ); }
     }
     else if(mapName==='zant'){ need('woopie',26); }
     else if(mapName==='junon'){ need('moldy',40); need('moldy_elite',12); need('rockgolem',6); }
@@ -1659,7 +1667,7 @@ Later patches (not in this edit):
     cart: { base:'#445', glyph:'' },
     harbor: { base:'#2b4a6a', glyph:'⛵' },
     ferryJ: { base:'#2b4a6a', glyph:'⛵' },
-    portal: { base:'#3a4b7a', glyph:'🌀' }
+    portal: { base:'#3a4b7a', glyph:'⛵' }
   };
   function drawNPCSprite(n){
     const bob = Math.sin(performance.now()/600 + (n.x+n.y)*0.02) * 1.2;
@@ -1682,9 +1690,9 @@ Later patches (not in this edit):
     ctx.restore();
     // nameplate + interaction hint
     ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.font='12px system-ui';
-    const label = n.npc==='merchant'? 'Merchant' : n.npc==='storage'? 'Storage' : n.npc==='cartmaster'? 'Cart Master' : n.npc==='trainer'? 'Trainer' : n.npc==='sign'? 'Quest' : (n.npc==='harbor'||n.npc==='ferryJ')? 'Travel Boat' : n.npc==='portal'? 'Portal' : '';
+    const label = n.npc==='merchant'? 'Merchant' : n.npc==='storage'? 'Storage' : n.npc==='cartmaster'? 'Cart Master' : n.npc==='trainer'? 'Trainer' : n.npc==='sign'? 'Quest' : (n.npc==='harbor'||n.npc==='ferryJ')? 'Travel Boat' : n.npc==='portal'? '(Travel) Captain Rush' : '';
     if(label){ ctx.save(); ctx.textAlign='center'; ctx.textBaseline='alphabetic'; ctx.strokeStyle='rgba(0,0,0,0.55)'; ctx.lineWidth=4; ctx.strokeText(label, s.x, s.y-30); ctx.fillStyle='#cfe'; ctx.fillText(label, s.x, s.y-30); ctx.restore(); }
-    const hint = (n.npc==='harbor'||n.npc==='ferryJ')? '⛵ E' : (n.npc==='portal'? '🌀 E' : 'E');
+    const hint = (n.npc==='harbor'||n.npc==='ferryJ'||n.npc==='portal')? '⛵ E' : 'E';
     ctx.fillText(hint, s.x, s.y-20);
   }
   function drawNPCSprites(){
@@ -1697,97 +1705,128 @@ Later patches (not in this edit):
   }
 
   function genPlains(){
-    for(let i=0;i<MAP_W*MAP_H;i++){
-      let x=i%MAP_W, y=(i/MAP_W)|0;
-      let g = (Math.sin(x*0.33)+Math.cos(y*0.27))*0.5 + Math.random()*0.6;
-      tiles[i] = g>0.55?1:0;
-    }
-    // Small creek far field for variation
-    for(let y=20;y<28;y++) for(let x=20;x<28;x++){ if((x-24)**2+(y-24)**2<16) tiles[y*MAP_W+x]=2; }
+    // Plains ground reset: all grass; only explicit paths are dirt
+    for(let i=0;i<MAP_W*MAP_H;i++) tiles[i]=0;
     decor.length=0;
+    // Natural scatter
     for(let y=0;y<MAP_H;y++){ for(let x=0;x<MAP_W;x++){
-      if(tiles[y*MAP_W+x]===0 && Math.random()>0.955) decor.push({t: Math.random()>0.55? 'tree':'rock', x:x*TILE+8+Math.random()*(TILE-16), y:y*TILE+8+Math.random()*(TILE-16)});
-      if(tiles[y*MAP_W+x]===0 && Math.random()>0.975) decor.push({t:'flower', x:x*TILE+10+Math.random()*(TILE-20), y:y*TILE+10+Math.random()*(TILE-20)});
+      if(tiles[y*MAP_W+x]===0 && Math.random()>0.96) decor.push({t: Math.random()>0.55? 'tree':'rock', x:x*TILE+8+Math.random()*(TILE-16), y:y*TILE+8+Math.random()*(TILE-16)});
+      if(tiles[y*MAP_W+x]===0 && Math.random()>0.983) decor.push({t:'flower', x:x*TILE+10+Math.random()*(TILE-20), y:y*TILE+10+Math.random()*(TILE-20)});
     }}
-    // Canyon-like spawn (north), town hub further to the right with a proper road
-    const canyon = { x:startPos.x, y:startPos.y, r:TILE*5.2 };
-    // Canyon rim with layered rock walls and vegetation
-    for(let k=0;k<26;k++){
-      const a = (k/26)*Math.PI*2; const rr = canyon.r + rand(-8,12);
-      const rx = canyon.x + Math.cos(a)*(rr+TILE*0.7);
-      const ry = canyon.y + Math.sin(a)*(rr+TILE*0.7);
-      decor.push({t:'rock', x:rx, y:ry});
-    }
-    for(let k=0;k<18;k++){
-      const a = (k/18)*Math.PI*2; const rr = canyon.r + TILE*1.4 + rand(-10,10);
-      const rx = canyon.x + Math.cos(a)*rr;
-      const ry = canyon.y + Math.sin(a)*rr;
-      if(Math.random()<0.6) decor.push({t:'tree', x:rx, y:ry}); else decor.push({t:'rock', x:rx, y:ry});
-    }
-    // L-shaped path from canyon exit → eastwards → down into town
-    const pathWidth = 2; // thicker than before
-    const spawnTx = Math.floor(canyon.x / TILE);
-    const spawnTy = Math.floor(canyon.y / TILE);
-    const eastLenTiles = 14; // move hub to the right
-    const elbowTx = Math.min(MAP_W-3, spawnTx + eastLenTiles);
-    const startTy = spawnTy + 3; // slight south out of canyon
-    const townYTile = startTy + 12;
-    // horizontal segment (east)
-    for(let tx = Math.min(spawnTx, elbowTx); tx <= Math.max(spawnTx, elbowTx); tx++){
-      for(let dy = -pathWidth; dy <= pathWidth; dy++){
-        const ty = startTy + dy; if(tx>1 && tx<MAP_W-1 && ty>1 && ty<MAP_H-1) tiles[ty*MAP_W+tx] = 1;
+
+    // Coastline bay in the southeast (reduced size)
+    const coastX0 = MAP_W-14, coastY0 = MAP_H-14;
+    for(let y=coastY0; y<MAP_H; y++){
+      for(let x=coastX0 - Math.floor((y-coastY0)*0.4); x<MAP_W; x++){
+        if(x>=0&&y>=0&&x<MAP_W&&y<MAP_H) tiles[y*MAP_W+x]=2;
       }
     }
-    // vertical segment (south)
-    for(let ty = Math.min(startTy, townYTile); ty <= Math.max(startTy, townYTile); ty++){
-      for(let dx = -pathWidth; dx <= pathWidth; dx++){
-        const tx = elbowTx + dx; if(tx>1 && tx<MAP_W-1 && ty>1 && ty<MAP_H-1) tiles[ty*MAP_W+tx] = 1;
+
+    // Rivers: two north→south channels forming a central island
+    const river = (xCenterBase, amp, width)=>{
+      for(let y=12; y<MAP_H-16; y++){
+        const xc = Math.floor(xCenterBase + Math.sin(y*0.22 + (xCenterBase*0.1)) * amp);
+        for(let dx=-width; dx<=width; dx++){
+          const x = xc+dx; if(x>1&&x<MAP_W-1) tiles[y*MAP_W + x] = 2;
+        }
+      }
+    };
+    const cxIsland = Math.floor(MAP_W*0.5);
+    river(cxIsland-7, 1, 1);
+    river(cxIsland+7, 1, 1);
+
+    // Primary loop road ringing the central island (slightly larger and thicker)
+    const markRoad = (x,y,w=3)=>{
+      for(let dx=-w; dx<=w; dx++){
+        for(let dy=-w; dy<=w; dy++){
+          const tx=x+dx, ty=y+dy; if(tx>1&&ty>1&&tx<MAP_W-1&&ty<MAP_H-1 && tiles[ty*MAP_W+tx]!==2) tiles[ty*MAP_W+tx]=1;
+        }
+      }
+    };
+    const rx = 20, ry = 16, cx = cxIsland, cy = Math.floor(MAP_H*0.46);
+    for(let t=0;t<360;t++){
+      const a=t*Math.PI/180; const x = Math.floor(cx + Math.cos(a)*rx); const y = Math.floor(cy + Math.sin(a)*ry);
+      markRoad(x,y,2);
+    }
+
+    // Bridges across both rivers at 2 points (reduce clutter)
+    const placeBridgeH = (yRow)=>{
+      // left channel
+      for(let x=cxIsland-10; x<=cxIsland-3; x++){ if(tiles[yRow*MAP_W+x]===2) tiles[yRow*MAP_W+x] = 1; }
+      // right channel
+      for(let x=cxIsland+3; x<=cxIsland+10; x++){ if(tiles[yRow*MAP_W+x]===2) tiles[yRow*MAP_W+x] = 1; }
+    };
+    placeBridgeH(cy+2);
+    placeBridgeH(cy-3);
+
+    // Spurs: to coast (south-east), to farm (west), to cave (NNE)
+    const drawSpur = (x0,y0,x1,y1)=>{
+      const steps = Math.max(1, Math.hypot(x1-x0,y1-y0)|0);
+      for(let i=0;i<=steps;i++){
+        const x = Math.floor(x0 + (x1-x0)*i/steps);
+        const y = Math.floor(y0 + (y1-y0)*i/steps);
+        markRoad(x,y,2);
+      }
+    };
+    // find a southern point on loop and lead to coast bay
+    drawSpur(cx, cy+ry, MAP_W-12, MAP_H-10);
+    // west farm spur
+    drawSpur(cx-rx, cy, 8, cy+4);
+    // NNE cave spur and marker
+    const caveTx = MAP_W-18, caveTy = 10; drawSpur(cx+6, cy-ry, caveTx, caveTy);
+    plainsCave = { x: caveTx*TILE, y: caveTy*TILE };
+
+    // Town footprint at SE coast near the bay
+    const townX = (MAP_W-18)*TILE, townY = (MAP_H-16)*TILE;
+    const ring = TILE*3.2;
+    plainsTownCenter = {x: townX, y: townY};
+    // Ensure ground: carve a rectangular dirt pad under the town
+    const townTx = Math.floor(townX / TILE), townTy = Math.floor(townY / TILE);
+    for(let y=townTy-8; y<=townTy+8; y++){
+      for(let x=townTx-10; x<=townTx+10; x++){
+        if(x>1&&y>1&&x<MAP_W-1&&y<MAP_H-1) tiles[y*MAP_W+x]=1;
       }
     }
-    // decorative canyon gate at exit (two pillars framing the road)
-    decor.push({t:'gate', x: elbowTx*TILE, y: (startTy-1)*TILE });
-    // Town center placed to the right to avoid edge clipping
-    const town = { x: elbowTx*TILE, y: (townYTile)*TILE };
-    plainsTownCenter = {x: town.x, y: town.y};
-    decor.push({t:'bonfire', x:town.x, y:town.y});
-    // Plaza stone around bonfire
-    decor.push({t:'plaza', x:town.x, y:town.y, r:TILE*6.6});
-    // Buildings and stalls behind each NPC around the bonfire
+    decor.push({t:'plaza', x:townX, y:townY, r:TILE*11.0});
+    decor.push({t:'bonfire', x:townX, y:townY});
+    // NPCs around the plaza
+    sign.x = townX; sign.y = townY - ring;
+    merchant.x = townX - ring; merchant.y = townY + TILE*0.6;
+    trainer.x = townX + ring; trainer.y = townY + TILE*0.6;
+    storageNPC.x = townX; storageNPC.y = townY + ring;
     const placeBld = (cx,cy,wTiles,hTiles,opts)=>{ const e={t:'bld', x:cx, y:cy, w:wTiles*TILE, h:hTiles*TILE}; if(opts){ Object.assign(e,opts);} decor.push(e); };
     const placeStall = (cx,cy,col)=> decor.push({t:'stall', x:cx, y:cy, col});
-    const ring = TILE*2.4;
-    // NPC arrangement referencing ROSE AP hub (bonfire in center, NPCs around, with buildings behind)
-    sign.x = town.x; sign.y = town.y - ring;
-    merchant.x = town.x - ring; merchant.y = town.y + TILE*0.6;
-    trainer.x = town.x + ring; trainer.y = town.y + TILE*0.6;
-    storageNPC.x = town.x; storageNPC.y = town.y + ring;
-    // Buildings behind each NPC (placed away from bonfire)
-    placeBld(sign.x, sign.y - TILE*2.2, 3, 2, {roof:'#3f7aa6', banner:'#3f7aa6', sign:'info'}); // bluish roof north
-    placeBld(merchant.x - TILE*2.8, merchant.y, 4, 3, {roof:'#a84f3c', banner:'#c95a4a', sign:'shop'}); // red roof west
-    placeStall(merchant.x - TILE*1.0, merchant.y - TILE*0.6, '#c95a4a');
-    placeBld(trainer.x + TILE*2.8, trainer.y, 4, 3, {roof:'#7aa63f', banner:'#4a8ac9', sign:'trainer'}); // green roof east
-    placeStall(trainer.x + TILE*1.0, trainer.y - TILE*0.6, '#4a8ac9');
-    placeBld(storageNPC.x, storageNPC.y + TILE*2.4, 4, 3, {roof:'#a68b3f', banner:'#af964a', sign:'storage'}); // ochre roof south
-    // Place a few standing stone pillars around the canyon for a proper "spawn ring"
-    for(let k=0;k<6;k++){
-      const a = (k/6)*Math.PI*2; const rr = canyon.r*0.85; const px = canyon.x + Math.cos(a)*rr; const py = canyon.y + Math.sin(a)*rr; decor.push({t:'pillar', x:px, y:py});
-    }
-    // Safe zones: canyon spawn and town circle — prevents Jelly Beans in both
+    placeBld(sign.x, sign.y - TILE*2.2, 3, 2, {roof:'#3f7aa6', banner:'#3f7aa6', sign:'info'});
+    placeBld(merchant.x - TILE*2.8, merchant.y, 4, 3, {roof:'#a84f3c', banner:'#c95a4a', sign:'shop'}); placeStall(merchant.x - TILE*1.0, merchant.y - TILE*0.6, '#c95a4a');
+    placeBld(trainer.x + TILE*2.8, trainer.y, 4, 3, {roof:'#7aa63f', banner:'#4a8ac9', sign:'trainer'}); placeStall(trainer.x + TILE*1.0, trainer.y - TILE*0.6, '#4a8ac9');
+    placeBld(storageNPC.x, storageNPC.y + TILE*2.4, 4, 3, {roof:'#a68b3f', banner:'#af964a', sign:'storage'});
+
+    // Pier and ship on the bay (adjust for smaller bay)
+    const pierX = (MAP_W-12)*TILE, pierY = (MAP_H-10)*TILE;
+    decor.push({t:'pier', x:pierX, y:pierY, w:TILE*3, h:TILE*6});
+    decor.push({t:'ship', x:pierX+TILE*2, y:pierY+TILE*5, len:TILE*6});
+
+    // Flaenae hill landmark (south-central to central-west)
+    plainsFlaenaeHill = { x:(cx-10)*TILE, y:(cy+2)*TILE, r:TILE*7.5 };
+    // Place a few pillar markers around the hill
+    for(let k=0;k<5;k++){ const a=(k/5)*Math.PI*2, rr=plainsFlaenaeHill.r*0.9; decor.push({t:'pillar', x:plainsFlaenaeHill.x + Math.cos(a)*rr, y:plainsFlaenaeHill.y + Math.sin(a)*rr}); }
+
+    // Safe zones: town circle and pier
     townZones.length = 0;
-    townZones.push({type:'circle', x:canyon.x, y:canyon.y, r:canyon.r});
-    townZones.push({type:'circle', x:town.x, y:town.y, r:TILE*7.4});
+    townZones.push({type:'circle', x:townX, y:townY, r:TILE*12.0});
+    townZones.push({type:'circle', x:pierX, y:pierY, r:TILE*6.0});
     el('zone').textContent = MAPS.plains.label;
-    // Spawns outside safe zones
-    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<2200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy) && dist(wx,wy,startPos.x,startPos.y)>TILE*26 && (!plainsTownCenter || dist(wx,wy,plainsTownCenter.x,plainsTownCenter.y)>TILE*20)){ spawnMob(t,wx,wy); n++; }}}};
-    const spawnFar=(t,count,minDist)=>{let n=0,tries=0;while(n<count&&tries<2400){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; const md=(minDist||TILE*28); if(!isInTown(wx,wy) && dist(wx,wy,startPos.x,startPos.y)>md && (!plainsTownCenter || dist(wx,wy,plainsTownCenter.x,plainsTownCenter.y)>TILE*22)){ spawnMob(t,wx,wy); n++; }}}};
-    // Jelly Beans only outside town/canyon
-    spawnOut('jelly',22);
-    // Choropy ring further out
-    spawnFar('choropy',18, TILE*28);
-    // Portal on the west road, still reachable but not crowding the plaza
+
+    // Base spawns: jellies near outskirts, choropy further; Flaenae concentrated on hill
+    const spawnOut=(t,count)=>{let n=0,tries=0;while(n<count&&tries<2200){tries++;const x=(Math.random()*MAP_W)|0,y=(Math.random()*MAP_H)|0;const tt=tiles[y*MAP_W+x];if(tt===0){ const wx=x*TILE+TILE/2, wy=y*TILE+TILE/2; if(!isInTown(wx,wy) && dist(wx,wy,plainsTownCenter.x,plainsTownCenter.y)>TILE*22){ spawnMob(t,wx,wy); n++; }}}};
+    const spawnRing=(t,count,cx,cy,rad)=>{let n=0,ang=0;while(n<count){ const wx=cx+Math.cos(ang)*rad, wy=cy+Math.sin(ang)*rad; const tx=(wx/TILE)|0, ty=(wy/TILE)|0; if(tx>=0&&ty>=0&&tx<MAP_W&&ty<MAP_H && tiles[ty*MAP_W+tx]===0 && !isInTown(wx,wy)){ spawnMob(t,wx,wy); n++; } ang+=Math.PI*2/Math.max(4,count); }};
+    spawnOut('jelly', 18);
+    spawnOut('choropy', 12);
+    // Flaenae on hill
+    spawnRing('flanae', Math.min((GRAPHICS&&GRAPHICS.caps&&GRAPHICS.caps.flaenae)||8, 10), plainsFlaenaeHill.x, plainsFlaenaeHill.y, plainsFlaenaeHill.r*0.7);
+
+    // No travel portals in Plains per design; keep empty
     portals.length = 0;
-    portals.push({kind:'npc', npc:'portal', x: town.x - TILE*12, y: town.y, r:22, dest:'luxem', tag:'grove'});
-    // If story quest is at travel step to Luxem, mark it complete on arrival there (handled on map change)
   }
   function genJunon(){
     for(let i=0;i<MAP_W*MAP_H;i++) tiles[i]=0;
@@ -2722,6 +2761,21 @@ function genLuxem(){
       } else if(d.t==='bones'){
         ctx.strokeStyle='#e9e1d1'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(s.x-10, s.y); ctx.lineTo(s.x+10, s.y); ctx.stroke();
         ctx.fillStyle='#e9e1d1'; ctx.beginPath(); ctx.arc(s.x-12, s.y, 3, 0, Math.PI*2); ctx.arc(s.x+12, s.y, 3, 0, Math.PI*2); ctx.fill();
+      } else if(d.t==='pier'){
+        // simple wooden pier
+        const w=d.w||TILE*3, h=d.h||TILE*6; const x0=s.x-w/2, y0=s.y-h/2;
+        ctx.fillStyle='#6b4a2a'; ctx.fillRect(x0, y0, w, h);
+        ctx.fillStyle='rgba(0,0,0,0.2)'; ctx.fillRect(x0, y0+h-4, w, 4);
+        // posts
+        ctx.fillStyle='#5a3a1f'; for(let i=0;i<5;i++){ ctx.fillRect(x0+6, y0+i*(h/4)-2, 6, 10); ctx.fillRect(x0+w-12, y0+i*(h/4)-2, 6, 10); }
+      } else if(d.t==='ship'){
+        // large stylized ship side view, moored behind pier
+        const len=d.len||TILE*6; const x0=s.x-len/2, y0=s.y;
+        ctx.fillStyle='#7b5331'; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0+len, y0); ctx.lineTo(x0+len-20, y0+24); ctx.lineTo(x0+20, y0+24); ctx.closePath(); ctx.fill();
+        ctx.fillStyle='#9a6b3f'; ctx.fillRect(x0+len*0.25, y0-20, len*0.5, 18);
+        // mast + sail
+        ctx.fillStyle='#5a3a22'; ctx.fillRect(x0+len*0.5-2, y0-46, 4, 46);
+        ctx.fillStyle='#e6e2d6'; ctx.beginPath(); ctx.moveTo(x0+len*0.5+2, y0-44); ctx.lineTo(x0+len*0.5+2+34, y0-22); ctx.lineTo(x0+len*0.5+2, y0-22); ctx.closePath(); ctx.fill();
       } else {
         ctx.fillStyle='#8fd3a0'; ctx.fillRect(s.x-2,s.y-2,4,4);
       }
@@ -2858,6 +2912,11 @@ function genLuxem(){
       drawDot(player.x, player.y, '#71e6a2', 4);
       drawDot(merchant.x, merchant.y, '#f1c40f', 4.5);
       drawDot(trainer.x, trainer.y, '#ffffff', 4.5);
+      // Plains-specific markers
+      if(mapName==='plains'){
+        if(plainsFlaenaeHill){ mapCtx.strokeStyle='rgba(160,220,120,0.7)'; mapCtx.lineWidth=2; mapCtx.beginPath(); mapCtx.arc(plainsFlaenaeHill.x*scaleX, plainsFlaenaeHill.y*scaleY, (plainsFlaenaeHill.r||TILE*6)*scaleX, 0, Math.PI*2); mapCtx.stroke(); }
+        if(plainsCave){ drawDot(plainsCave.x, plainsCave.y, '#d9b26c', 4.5); }
+      }
       if(summonedCart) drawDot(summonedCart.x, summonedCart.y, '#6cf', 3.5);
       // Quest marker (!) above NPC if a quest is available
       const questNpc = (qIndex===0? sign : (qIndex===3? cartMaster : (qIndex===4? trainer : null)));
